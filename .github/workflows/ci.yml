@@ -1,0 +1,199 @@
+name: DevSecOps CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# Principle: Fail fast — security gates stop the pipeline early
+# Principle: Shift-left — security checks run BEFORE build/deploy
+
+jobs:
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 1 – Backend Security & Tests
+  # ══════════════════════════════════════════════════════════════════════════
+  backend:
+    name: Backend — Build · Test · Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # ── SECURITY GATE 1: Dependency vulnerability scan ───────────────────
+      - name: 🔒 Scan .NET dependencies for vulnerabilities
+        working-directory: backend
+        run: |
+          echo "=== Scanning NuGet packages for known vulnerabilities ==="
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+
+          # SECURITY GATE: Fail if any HIGH or CRITICAL vulnerabilities found
+          if grep -qiE "(High|Critical)" vuln-report.txt; then
+            echo "❌ SECURITY GATE FAILED: High/Critical vulnerabilities found!"
+            echo "Pipeline blocked — fix vulnerabilities before merging."
+            cat vuln-report.txt
+            exit 1
+          fi
+          echo "✅ No High/Critical vulnerabilities found."
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build backend
+        working-directory: backend
+        run: dotnet build --configuration Release --no-restore
+
+      # ── Unit tests ────────────────────────────────────────────────────────
+      - name: Run backend unit tests
+        working-directory: backend
+        run: |
+          dotnet test Tests/DevSecOpsApi.Tests.csproj \
+            --configuration Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --results-directory ./TestResults
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: backend/TestResults/
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 2 – Frontend Security & Tests
+  # ══════════════════════════════════════════════════════════════════════════
+  frontend:
+    name: Frontend — Build · Test · Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # ── SECURITY GATE 2: npm dependency audit ────────────────────────────
+      - name: 🔒 Audit npm dependencies for vulnerabilities
+        working-directory: frontend
+        run: |
+          echo "=== Running npm audit ==="
+          # --audit-level=high blocks on HIGH and CRITICAL only
+          # Change to 'moderate' for stricter enforcement
+          npm audit --audit-level=high 2>&1 | tee npm-audit.txt || {
+            echo "❌ SECURITY GATE FAILED: npm audit found high/critical vulnerabilities!"
+            echo "Run 'npm audit fix' locally and commit the fix."
+            exit 1
+          }
+          echo "✅ npm audit passed."
+
+      # ── Type checking ─────────────────────────────────────────────────────
+      - name: TypeScript type check
+        working-directory: frontend
+        run: npm run type-check
+
+      # ── Linting ───────────────────────────────────────────────────────────
+      - name: ESLint static analysis
+        working-directory: frontend
+        run: npm run lint
+
+      # ── Unit tests ────────────────────────────────────────────────────────
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm test
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 3 – CodeQL Static Analysis (SAST)
+  # ══════════════════════════════════════════════════════════════════════════
+  codeql:
+    name: 🔒 CodeQL Static Analysis (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    strategy:
+      matrix:
+        language: [csharp, javascript-typescript]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Use security-extended queries for deeper analysis
+          queries: security-extended
+
+      - name: Setup .NET (for C# analysis)
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build backend (for CodeQL C# scan)
+        if: matrix.language == 'csharp'
+        working-directory: backend
+        run: dotnet build --configuration Release
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 4 – Deploy (only on main, only if all security gates pass)
+  # ══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: 🚀 Deploy Frontend to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, codeql]   # ALL security jobs must pass first
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: ./dist
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages

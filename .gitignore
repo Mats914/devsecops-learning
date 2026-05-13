@@ -1,0 +1,29 @@
+# .NET
+bin/
+obj/
+*.user
+*.db
+*.db-shm
+*.db-wal
+appsettings.Development.json
+
+# Node / React
+node_modules/
+dist/
+.env
+.env.local
+*.local
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+coverage/
