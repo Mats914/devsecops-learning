@@ -1,0 +1,281 @@
+name: DevSecOps CI/CD Pipeline v2
+
+on:
+  push:    { branches: [main, develop] }
+  pull_request: { branches: [main] }
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION:   '20'
+
+jobs:
+# ═══════════════════════════════════════════════════════════════════════════
+# JOB 1 — Backend: Security Scan + Build + Test
+# ═══════════════════════════════════════════════════════════════════════════
+  backend:
+    name: Backend — Scan · Build · Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ env.DOTNET_VERSION }}'
+
+      - name: Restore packages
+        working-directory: backend
+        run: dotnet restore DevSecOpsApi.csproj
+
+      # ── SECURITY GATE 1: Dependency vulnerability scan ───────────────────
+      # Blocks on High AND Critical. Moderate allowed (logged as warning).
+      - name: 🔒 NuGet vulnerability scan
+        working-directory: backend
+        run: |
+          echo "=== Scanning NuGet packages for vulnerabilities ==="
+          dotnet list DevSecOpsApi.csproj package \
+            --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+
+          # Show full report in logs
+          cat vuln-report.txt
+
+          # GATE: block only on High or Critical
+          if grep -qiE "^\s+> .+(High|Critical)" vuln-report.txt; then
+            echo ""
+            echo "❌ SECURITY GATE FAILED: High/Critical vulnerabilities found!"
+            echo "Update the affected packages in DevSecOpsApi.csproj before merging."
+            exit 1
+          fi
+
+          echo "✅ No High/Critical NuGet vulnerabilities found."
+
+      # ── Build ────────────────────────────────────────────────────────────
+      - name: Build backend
+        working-directory: backend
+        run: dotnet build DevSecOpsApi.csproj -c Release --no-restore
+
+      # ── Unit tests ───────────────────────────────────────────────────────
+      - name: Run unit tests
+        working-directory: backend
+        run: |
+          dotnet test Tests/DevSecOpsApi.Tests.csproj \
+            -c Release \
+            --logger "trx;LogFileName=results.trx" \
+            --results-directory ./TestResults \
+            --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: backend/TestResults/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# JOB 2 — Frontend: Security Scan + Lint + Test + Build
+# ═══════════════════════════════════════════════════════════════════════════
+  frontend:
+    name: Frontend — Scan · Lint · Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '${{ env.NODE_VERSION }}'
+          # FIX: correct path for npm cache (was causing "paths not resolved" error)
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # Generate package-lock.json if missing (first run)
+      - name: Generate lockfile if missing
+        working-directory: frontend
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "package-lock.json not found — generating..."
+            npm install --package-lock-only
+          fi
+
+      # ── SECURITY GATE 2: npm audit ───────────────────────────────────────
+      - name: 🔒 npm dependency audit
+        working-directory: frontend
+        run: |
+          echo "=== Running npm audit ==="
+          # Capture output but don't fail on moderate (only high+)
+          npm audit --audit-level=high 2>&1 | tee npm-audit.txt || {
+            echo ""
+            echo "❌ SECURITY GATE FAILED: High/Critical npm vulnerabilities found!"
+            echo "Run 'npm audit fix' locally and commit the updated package-lock.json"
+            exit 1
+          }
+          echo "✅ npm audit passed (no High/Critical vulnerabilities)."
+
+      # ── TypeScript + Lint ────────────────────────────────────────────────
+      - name: TypeScript type check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: ESLint static analysis
+        working-directory: frontend
+        run: npm run lint
+
+      # ── Tests ────────────────────────────────────────────────────────────
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test
+
+      # ── Build ────────────────────────────────────────────────────────────
+      - name: Build production bundle
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# JOB 3 — CodeQL SAST (C# + TypeScript)
+# ═══════════════════════════════════════════════════════════════════════════
+  codeql:
+    name: 🔒 CodeQL SAST
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      matrix:
+        language: [csharp, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Setup .NET (for C# analysis)
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ env.DOTNET_VERSION }}'
+
+      - name: Build backend for CodeQL
+        if: matrix.language == 'csharp'
+        working-directory: backend
+        run: dotnet build DevSecOpsApi.csproj -c Release
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# JOB 4 — Docker Build & Trivy Container Scan
+# ═══════════════════════════════════════════════════════════════════════════
+  docker-scan:
+    name: 🔒 Docker Build & Trivy Scan
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker images
+        run: |
+          docker build -f docker/Dockerfile.backend -t devsecops-backend:ci .
+          docker build -f docker/Dockerfile.frontend -t devsecops-frontend:ci .
+
+      - name: 🔒 Trivy scan — backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'devsecops-backend:ci'
+          format: 'table'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+      - name: 🔒 Trivy scan — frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'devsecops-frontend:ci'
+          format: 'table'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+# ═══════════════════════════════════════════════════════════════════════════
+# JOB 5 — Smoke Test (start real API and hit /health)
+# ═══════════════════════════════════════════════════════════════════════════
+  smoke-test:
+    name: 🚀 Smoke Test — /health
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, codeql]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ env.DOTNET_VERSION }}'
+
+      - name: Restore & Start backend
+        working-directory: backend
+        run: |
+          dotnet restore DevSecOpsApi.csproj
+          dotnet run --project DevSecOpsApi.csproj \
+            --urls "http://localhost:5000" &
+          echo "Waiting for API to start..."
+          for i in $(seq 1 20); do
+            if curl -s http://localhost:5000/health > /dev/null 2>&1; then
+              echo "API is up after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+      # ── SECURITY GATE: /health must return 200 ──────────────────────────
+      - name: 🔒 Health check gate
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health)
+          echo "Health check returned: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Health check FAILED (got $STATUS, expected 200)"
+            exit 1
+          fi
+          echo "✅ Health check passed (200 OK)"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# JOB 6 — Deploy (main only, ALL gates must pass)
+# ═══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: 🚀 Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, codeql, docker-scan, smoke-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: ./dist
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
