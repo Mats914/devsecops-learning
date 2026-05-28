@@ -1,7 +1,7 @@
 name: DevSecOps CI/CD Pipeline v2
 
 on:
-  push:    { branches: [main, develop] }
+  push:         { branches: [main, develop] }
   pull_request: { branches: [main] }
 
 env:
@@ -20,23 +20,36 @@ jobs:
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '${{ env.DOTNET_VERSION }}' }
+        with:
+          dotnet-version: '${{ env.DOTNET_VERSION }}'
 
       - name: Restore packages
         working-directory: backend
         run: dotnet restore DevSecOpsApi.csproj
 
-      # ── SECURITY GATE 1: Dependency vulnerability scan ──────────────────
+      # ── SECURITY GATE 1: NuGet vulnerability scan ────────────────────────
       - name: 🔒 NuGet vulnerability scan
         working-directory: backend
         run: |
-          dotnet list DevSecOpsApi.csproj package --vulnerable --include-transitive 2>&1 \
-            | tee vuln-report.txt
-          if grep -qiE "(High|Critical)" vuln-report.txt; then
-            echo "❌ SECURITY GATE FAILED: High/Critical NuGet vulnerabilities found!"
+          echo "=== Scanning NuGet packages for vulnerabilities ==="
+
+          dotnet list DevSecOpsApi.csproj package \
+            --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+
+          cat vuln-report.txt
+
+          # Count High/Critical lines in the table output
+          # Table rows look like:  "   > PackageName   x.y.z   High   https://..."
+          HIGH_COUNT=$(grep -cE "High|Critical" vuln-report.txt || true)
+
+          if [ "$HIGH_COUNT" -gt "0" ]; then
+            echo ""
+            echo "❌ SECURITY GATE FAILED: $HIGH_COUNT High/Critical vulnerability line(s) found!"
+            echo "Update the affected packages in DevSecOpsApi.csproj before merging."
             exit 1
           fi
-          echo "✅ NuGet scan passed."
+
+          echo "✅ No High/Critical NuGet vulnerabilities found."
 
       # ── Build ────────────────────────────────────────────────────────────
       - name: Build backend
@@ -50,8 +63,7 @@ jobs:
           dotnet test Tests/DevSecOpsApi.Tests.csproj \
             -c Release \
             --logger "trx;LogFileName=results.trx" \
-            --results-directory ./TestResults \
-            --collect:"XPlat Code Coverage"
+            --results-directory ./TestResults
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -73,28 +85,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '${{ env.NODE_VERSION }}'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          # NOTE: cache is intentionally omitted here.
+          # npm cache requires a committed package-lock.json.
+          # Run "npm install" locally and commit the lockfile to enable caching.
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install
 
       # ── SECURITY GATE 2: npm audit ───────────────────────────────────────
       - name: 🔒 npm dependency audit
         working-directory: frontend
         run: |
+          echo "=== Running npm audit ==="
           npm audit --audit-level=high 2>&1 | tee npm-audit.txt || {
+            echo ""
             echo "❌ SECURITY GATE FAILED: High/Critical npm vulnerabilities!"
+            echo "Run 'npm audit fix' locally and commit the updated package-lock.json"
             exit 1
           }
           echo "✅ npm audit passed."
 
-      # ── TypeScript + Lint ─────────────────────────────────────────────────
+      # ── TypeScript type check ─────────────────────────────────────────────
       - name: TypeScript type check
         working-directory: frontend
         run: npm run type-check
 
+      # ── Lint ──────────────────────────────────────────────────────────────
       - name: ESLint static analysis
         working-directory: frontend
         run: npm run lint
@@ -104,7 +121,7 @@ jobs:
         working-directory: frontend
         run: npm test
 
-      # ── Build ─────────────────────────────────────────────────────────────
+      # ── Production build ──────────────────────────────────────────────────
       - name: Build production bundle
         working-directory: frontend
         run: npm run build
@@ -137,10 +154,11 @@ jobs:
           languages: ${{ matrix.language }}
           queries: security-extended
 
-      - name: Setup .NET (C# build for CodeQL)
+      - name: Setup .NET (for C# CodeQL)
         if: matrix.language == 'csharp'
         uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '${{ env.DOTNET_VERSION }}' }
+        with:
+          dotnet-version: '${{ env.DOTNET_VERSION }}'
 
       - name: Build backend for CodeQL
         if: matrix.language == 'csharp'
@@ -153,7 +171,7 @@ jobs:
           category: "/language:${{ matrix.language }}"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 4 — Docker Build & Scan
+# JOB 4 — Docker Build & Trivy Scan
 # ═══════════════════════════════════════════════════════════════════════════
   docker-scan:
     name: 🔒 Docker Build & Trivy Scan
@@ -167,30 +185,29 @@ jobs:
           docker build -f docker/Dockerfile.backend -t devsecops-backend:ci .
           docker build -f docker/Dockerfile.frontend -t devsecops-frontend:ci .
 
-      # ── SECURITY GATE 3: Container vulnerability scan ───────────────────
-      - name: 🔒 Trivy scan – backend image
+      - name: 🔒 Trivy scan — backend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: devsecops-backend:ci
-          format: table
+          image-ref: 'devsecops-backend:ci'
+          format: 'table'
           exit-code: '1'
-          severity: HIGH,CRITICAL
+          severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
 
-      - name: 🔒 Trivy scan – frontend image
+      - name: 🔒 Trivy scan — frontend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: devsecops-frontend:ci
-          format: table
+          image-ref: 'devsecops-frontend:ci'
+          format: 'table'
           exit-code: '1'
-          severity: HIGH,CRITICAL
+          severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 5 — Health Check after Smoke Test
+# JOB 5 — Smoke Test
 # ═══════════════════════════════════════════════════════════════════════════
   smoke-test:
-    name: 🚀 Smoke Test (API Health Check)
+    name: 🚀 Smoke Test — /health
     runs-on: ubuntu-latest
     needs: [backend, frontend, codeql]
     steps:
@@ -198,26 +215,35 @@ jobs:
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '${{ env.DOTNET_VERSION }}' }
+        with:
+          dotnet-version: '${{ env.DOTNET_VERSION }}'
 
       - name: Start backend
         working-directory: backend
         run: |
-          dotnet run --project DevSecOpsApi.csproj &
-          sleep 15
+          dotnet restore DevSecOpsApi.csproj
+          dotnet run --project DevSecOpsApi.csproj --urls "http://localhost:5000" &
+          echo "Waiting for API..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5000/health > /dev/null 2>&1; then
+              echo "✅ API ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
 
-      # ── SECURITY GATE 4: Health endpoint must return 200 ────────────────
       - name: 🔒 Health check gate
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health)
+          echo "Health endpoint returned: HTTP $STATUS"
           if [ "$STATUS" != "200" ]; then
-            echo "❌ Health check failed with status $STATUS"
+            echo "❌ Health check FAILED (expected 200, got $STATUS)"
             exit 1
           fi
-          echo "✅ Health check passed (200 OK)"
+          echo "✅ Health check passed."
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 6 — Deploy (main branch only, all gates must pass)
+# JOB 6 — Deploy (main only, all gates must pass)
 # ═══════════════════════════════════════════════════════════════════════════
   deploy:
     name: 🚀 Deploy to GitHub Pages

@@ -17,34 +17,60 @@
 
   <ItemGroup>
     <!-- Auth & Security -->
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt"               Version="7.3.1" />
-    <PackageReference Include="BCrypt.Net-Next"                                Version="4.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt"               Version="8.6.1"  />
+    <PackageReference Include="BCrypt.Net-Next"                                Version="4.0.3"  />
 
     <!-- Database -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite"           Version="8.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"           Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite"           Version="8.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"           Version="8.0.15" />
 
     <!-- Rate Limiting -->
-    <PackageReference Include="AspNetCoreRateLimit"                            Version="5.0.0" />
+    <PackageReference Include="AspNetCoreRateLimit"                            Version="5.0.0"  />
 
     <!-- Logging -->
-    <PackageReference Include="Serilog.AspNetCore"                             Version="8.0.1" />
-    <PackageReference Include="Serilog.Sinks.Console"                          Version="5.0.1" />
-    <PackageReference Include="Serilog.Sinks.File"                             Version="5.0.0" />
-    <PackageReference Include="Serilog.Formatting.Compact"                     Version="2.0.0" />
+    <PackageReference Include="Serilog.AspNetCore"                             Version="8.0.3"  />
+    <PackageReference Include="Serilog.Sinks.Console"                          Version="6.0.0"  />
+    <PackageReference Include="Serilog.Sinks.File"                             Version="6.0.0"  />
+    <PackageReference Include="Serilog.Formatting.Compact"                     Version="3.0.0"  />
 
     <!-- Health Checks -->
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.15" />
 
-    <!-- Email -->
-    <PackageReference Include="MailKit"                                         Version="4.3.0" />
+    <!--
+      EMAIL: MailKit 4.9.0 fixes GHSA-9j88-vvj5-vhgr (Moderate)
+      Also pulls in patched MimeKit + BouncyCastle transitively
+    -->
+    <PackageReference Include="MailKit" Version="4.9.0" />
 
-    <!-- Image Upload -->
-    <PackageReference Include="SixLabors.ImageSharp"                           Version="3.1.3" />
+    <!--
+      IMAGE: SixLabors.ImageSharp 3.1.7 fixes:
+        GHSA-63p8-c4ww-9cg7 (High)  - fixed in 3.1.5
+        GHSA-2cmq-823j-5qj8 (High)  - fixed in 3.1.5
+        + 4x Moderate CVEs
+    -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
 
     <!-- Swagger -->
-    <PackageReference Include="Swashbuckle.AspNetCore"                         Version="6.5.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+
+    <!--
+      FORCE transitive deps to patched versions.
+      dotnet resolves the LOWEST compatible version by default,
+      so we must explicitly pin these to override vulnerable versions.
+    -->
+
+    <!-- System.Text.Json 8.0.5 fixes GHSA-hh2w-p6rv-4g7w + GHSA-8g4q-xg66-9fp4 (both High) -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+
+    <!-- System.Formats.Asn1 8.0.1 fixes GHSA-447r-wph3-92pm (High) -->
+    <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
+
+    <!--
+      Microsoft.Extensions.Caching.Memory 9.0.5 fixes GHSA-qj66-m88j-hmgj (High)
+      Note: 9.x is compatible with .NET 8 apps
+    -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.5" />
   </ItemGroup>
 
 </Project>
