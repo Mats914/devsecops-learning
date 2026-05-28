@@ -11,10 +11,10 @@ export default function App() {
         <Navbar />
         <main className="main-content">
           <Routes>
-            <Route path="/"          element={<PostsPage />} />
-            <Route path="/login"     element={<LoginPage />} />
-            <Route path="/register"  element={<RegisterPage />} />
-            <Route path="*"          element={<Navigate to="/" replace />} />
+            <Route path="/"         element={<PostsPage />} />
+            <Route path="/login"    element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="*"         element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </BrowserRouter>

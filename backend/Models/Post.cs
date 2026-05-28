@@ -12,10 +12,17 @@ public class Post
     [Required, MaxLength(5000)]
     public string Content   { get; set; } = string.Empty;
 
+    [MaxLength(500)]
+    public string? ImagePath { get; set; }
+
+    public int    ViewCount  { get; set; } = 0;
+    public bool   IsPublished { get; set; } = true;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    // Foreign key
     public int    AuthorId  { get; set; }
     public User   Author    { get; set; } = null!;
+
+    public ICollection<Comment> Comments { get; set; } = [];
 }

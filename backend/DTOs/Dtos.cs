@@ -7,11 +7,16 @@ namespace DevSecOpsApi.DTOs;
 public record RegisterRequest(
     [Required, MinLength(3), MaxLength(50),
      RegularExpression(@"^[a-zA-Z0-9_]+$",
-         ErrorMessage = "Username may only contain letters, digits, and underscores.")]
+         ErrorMessage = "Username: letters, digits and underscores only.")]
     string Username,
 
-    [Required, MinLength(8), MaxLength(100)]
-    string Password
+    [Required, MinLength(8), MaxLength(100),
+     RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$",
+         ErrorMessage = "Password must contain uppercase, lowercase, digit and special character.")]
+    string Password,
+
+    [EmailAddress, MaxLength(200)]
+    string? Email
 );
 
 public record LoginRequest(
@@ -19,11 +24,17 @@ public record LoginRequest(
     [Required] string Password
 );
 
+public record RefreshRequest(
+    [Required] string RefreshToken
+);
+
 public record AuthResponse(
-    string Token,
-    string Username,
-    string Role,
-    DateTime ExpiresAt
+    string   AccessToken,
+    string   RefreshToken,
+    string   Username,
+    string   Role,
+    bool     EmailVerified,
+    DateTime AccessTokenExpiresAt
 );
 
 // ── Posts ──────────────────────────────────────────────────────────────────
@@ -42,7 +53,40 @@ public record PostResponse(
     int      Id,
     string   Title,
     string   Content,
+    string?  ImageUrl,
+    string   AuthorUsername,
+    int      ViewCount,
+    int      CommentCount,
+    DateTime CreatedAt,
+    DateTime UpdatedAt
+);
+
+public record PostsPagedResponse(
+    IEnumerable<PostResponse> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages
+);
+
+// ── Comments ───────────────────────────────────────────────────────────────
+
+public record CreateCommentRequest(
+    [Required, MinLength(1), MaxLength(2000)] string Content
+);
+
+public record UpdateCommentRequest(
+    [Required, MinLength(1), MaxLength(2000)] string Content
+);
+
+public record CommentResponse(
+    int      Id,
+    string   Content,
     string   AuthorUsername,
     DateTime CreatedAt,
     DateTime UpdatedAt
 );
+
+// ── Health ─────────────────────────────────────────────────────────────────
+
+public record HealthResponse(string Status, string Version, DateTime Timestamp);

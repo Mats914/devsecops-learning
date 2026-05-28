@@ -2,25 +2,28 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export function Navbar() {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, isAdmin } = useAuth();
   const navigate = useNavigate();
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     navigate('/login');
   }
 
   return (
     <nav className="navbar">
-      <Link to="/" className="nav-brand">
-        🔐 DevSecOps Blog
-      </Link>
+      <Link to="/" className="nav-brand">🔐 DevSecOps Blog</Link>
       <div className="nav-links">
         {isAuthenticated ? (
           <>
+            {!user?.emailVerified && (
+              <span className="badge-warn" title="Check your email to verify your account">
+                ⚠ Unverified
+              </span>
+            )}
             <span className="nav-user">
               {user?.username}
-              {user?.role === 'Admin' && <span className="badge-admin">Admin</span>}
+              {isAdmin && <span className="badge-admin">Admin</span>}
             </span>
             <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
               Sign out

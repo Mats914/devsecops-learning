@@ -1,105 +1,144 @@
 /**
- * Secure API client
- *
- * DevSecOps principle: All backend communication is centralised here.
- * - JWTs are stored in memory (NOT localStorage) to mitigate XSS token theft.
- * - The token is injected on every authenticated request automatically.
- * - Error handling is consistent; raw error details are never leaked to the UI.
+ * Secure API client — DevSecOps principles:
+ * - Access token in memory (not localStorage → mitigates XSS theft)
+ * - Refresh token auto-rotation on 401
+ * - Centralized error handling
+ * - All requests go through one function (no scattered fetch calls)
  */
 
 import type {
-  AuthResponse,
-  LoginRequest,
-  RegisterRequest,
-  Post,
-  CreatePostRequest,
-  UpdatePostRequest,
+  AuthResponse, LoginRequest, RegisterRequest,
+  Post, PostsPagedResponse, CreatePostRequest, UpdatePostRequest,
+  Comment, CreateCommentRequest, PageParams,
 } from '../types';
 
-// ── In-memory token store (mitigates XSS vs localStorage) ─────────────────
-let _token: string | null = null;
+const BASE = '/api';
+
+// ── In-memory token store ──────────────────────────────────────────────────
+let _accessToken:  string | null = null;
+let _refreshToken: string | null = null;
+let _refreshing:   Promise<boolean> | null = null;
 
 export const tokenStore = {
-  set: (token: string) => { _token = token; },
-  get: ()              => _token,
-  clear: ()            => { _token = null; },
+  setTokens: (access: string, refresh: string) => {
+    _accessToken  = access;
+    _refreshToken = refresh;
+  },
+  clearTokens: () => {
+    _accessToken  = null;
+    _refreshToken = null;
+  },
+  getAccess:  () => _accessToken,
+  getRefresh: () => _refreshToken,
 };
 
-// ── Base fetch wrapper ─────────────────────────────────────────────────────
+// ── Base fetch ─────────────────────────────────────────────────────────────
 
-const BASE_URL = '/api';
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> ?? {}),
   };
 
-  if (_token) {
-    headers['Authorization'] = `Bearer ${_token}`;
+  // Don't set Content-Type for FormData (browser sets it with boundary)
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
+  if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
+
+  const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers,
-    // Security: never send cookies cross-origin
     credentials: 'same-origin',
   });
 
-  if (response.status === 204) return undefined as unknown as T;
-
-  const body = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw {
-      message: body?.message ?? 'An unexpected error occurred.',
-      status: response.status,
-    };
+  // Auto-refresh on 401
+  if (res.status === 401 && retry && _refreshToken) {
+    const ok = await silentRefresh();
+    if (ok) return request<T>(path, options, false);
   }
 
+  if (res.status === 204) return undefined as unknown as T;
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw { message: body?.message ?? 'Unexpected error.', status: res.status };
   return body as T;
 }
 
-// ── Auth endpoints ─────────────────────────────────────────────────────────
+async function silentRefresh(): Promise<boolean> {
+  if (_refreshing) return _refreshing;
+  _refreshing = (async () => {
+    try {
+      const res = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: _refreshToken }),
+      });
+      if (!res.ok) { tokenStore.clearTokens(); return false; }
+      const data: AuthResponse = await res.json();
+      tokenStore.setTokens(data.accessToken, data.refreshToken);
+      return true;
+    } catch {
+      tokenStore.clearTokens();
+      return false;
+    } finally {
+      _refreshing = null;
+    }
+  })();
+  return _refreshing;
+}
+
+// ── Auth API ───────────────────────────────────────────────────────────────
 
 export const authApi = {
   register: (data: RegisterRequest) =>
-    request<AuthResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
 
   login: (data: LoginRequest) =>
-    request<AuthResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+
+  refresh: (refreshToken: string) =>
+    request<AuthResponse>('/auth/refresh', { method: 'POST', body: JSON.stringify({ refreshToken }) }),
+
+  revoke: (refreshToken: string) =>
+    request<void>('/auth/revoke', { method: 'POST', body: JSON.stringify({ refreshToken }) }),
 };
 
-// ── Post endpoints ─────────────────────────────────────────────────────────
+// ── Posts API ──────────────────────────────────────────────────────────────
 
 export const postsApi = {
-  getAll: () =>
-    request<Post[]>('/posts'),
+  getAll: ({ page = 1, pageSize = 10, search, author }: Partial<PageParams> = {}) => {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (search)  params.set('search', search);
+    if (author)  params.set('author', author);
+    return request<PostsPagedResponse>(`/posts?${params}`);
+  },
 
-  getById: (id: number) =>
-    request<Post>(`/posts/${id}`),
+  getById: (id: number) => request<Post>(`/posts/${id}`),
 
-  create: (data: CreatePostRequest) =>
-    request<Post>('/posts', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  create: (data: CreatePostRequest, image?: File) => {
+    const form = new FormData();
+    form.append('title',   data.title);
+    form.append('content', data.content);
+    if (image) form.append('image', image);
+    return request<Post>('/posts', { method: 'POST', body: form });
+  },
 
   update: (id: number, data: UpdatePostRequest) =>
-    request<Post>(`/posts/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    request<Post>(`/posts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
-  delete: (id: number) =>
-    request<void>(`/posts/${id}`, { method: 'DELETE' }),
+  delete: (id: number) => request<void>(`/posts/${id}`, { method: 'DELETE' }),
+};
+
+// ── Comments API ───────────────────────────────────────────────────────────
+
+export const commentsApi = {
+  getByPost: (postId: number) =>
+    request<Comment[]>(`/posts/${postId}/comments`),
+
+  create: (postId: number, data: CreateCommentRequest) =>
+    request<Comment>(`/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
+
+  delete: (postId: number, commentId: number) =>
+    request<void>(`/posts/${postId}/comments/${commentId}`, { method: 'DELETE' }),
 };

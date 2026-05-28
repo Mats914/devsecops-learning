@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using DevSecOpsApi.Data;
 using DevSecOpsApi.DTOs;
 using DevSecOpsApi.Models;
@@ -8,28 +10,34 @@ using DevSecOpsApi.Services;
 
 namespace DevSecOpsApi.Tests;
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-file static class TestHelpers
+file static class Helpers
 {
-    public static AppDbContext CreateInMemoryDb(string dbName)
+    public static AppDbContext InMemoryDb(string name)
     {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-        return new AppDbContext(options);
+        var opts = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(name).Options;
+        return new AppDbContext(opts);
     }
 
-    public static IConfiguration CreateConfig() =>
-        new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Key"]           = "SuperSecretKeyForTestingPurposesOnly123!",
-                ["Jwt:Issuer"]        = "TestIssuer",
-                ["Jwt:Audience"]      = "TestAudience",
-                ["Jwt:ExpiryMinutes"] = "60"
-            })
-            .Build();
+    public static IConfiguration Config() =>
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"]                    = "SuperSecretKeyForTestingPurposesOnly123!!",
+            ["Jwt:Issuer"]                 = "TestIssuer",
+            ["Jwt:Audience"]               = "TestAudience",
+            ["Jwt:AccessTokenExpiryMinutes"] = "15",
+            ["Jwt:RefreshTokenExpiryDays"] = "7"
+        }).Build();
+
+    public static AuthService MakeAuthService(AppDbContext db)
+    {
+        var email = new Mock<IEmailService>();
+        var audit = new Mock<IAuditService>();
+        audit.Setup(a => a.LogAsync(It.IsAny<string>(), It.IsAny<string?>(),
+                                    It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<bool>()))
+             .Returns(Task.CompletedTask);
+        return new AuthService(db, Config(), email.Object, audit.Object);
+    }
 }
 
 // ── AuthService tests ──────────────────────────────────────────────────────
@@ -37,66 +45,92 @@ file static class TestHelpers
 public class AuthServiceTests
 {
     [Fact]
-    public async Task Register_WithValidData_ReturnsToken()
+    public async Task Register_ValidData_ReturnsTokens()
     {
-        using var db    = TestHelpers.CreateInMemoryDb(nameof(Register_WithValidData_ReturnsToken));
-        var service     = new AuthService(db, TestHelpers.CreateConfig());
-        var request     = new RegisterRequest("alice", "Password123!");
+        using var db = Helpers.InMemoryDb(nameof(Register_ValidData_ReturnsTokens));
+        var svc      = Helpers.MakeAuthService(db);
 
-        var result = await service.RegisterAsync(request);
+        var result = await svc.RegisterAsync(new RegisterRequest("alice", "Password1!", null), null);
 
         result.Should().NotBeNull();
-        result!.Token.Should().NotBeNullOrWhiteSpace();
+        result!.AccessToken.Should().NotBeNullOrWhiteSpace();
+        result.RefreshToken.Should().NotBeNullOrWhiteSpace();
         result.Username.Should().Be("alice");
-        result.Role.Should().Be("User");
     }
 
     [Fact]
-    public async Task Register_WithDuplicateUsername_ReturnsNull()
+    public async Task Register_DuplicateUsername_ReturnsNull()
     {
-        using var db = TestHelpers.CreateInMemoryDb(nameof(Register_WithDuplicateUsername_ReturnsNull));
-        var service  = new AuthService(db, TestHelpers.CreateConfig());
+        using var db = Helpers.InMemoryDb(nameof(Register_DuplicateUsername_ReturnsNull));
+        var svc      = Helpers.MakeAuthService(db);
 
-        await service.RegisterAsync(new RegisterRequest("bob", "Password123!"));
-        var result = await service.RegisterAsync(new RegisterRequest("bob", "Different1!"));
+        await svc.RegisterAsync(new RegisterRequest("bob", "Password1!", null), null);
+        var result = await svc.RegisterAsync(new RegisterRequest("bob", "Other1!pass", null), null);
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task Login_WithCorrectCredentials_ReturnsToken()
+    public async Task Login_CorrectCredentials_ReturnsTokens()
     {
-        using var db = TestHelpers.CreateInMemoryDb(nameof(Login_WithCorrectCredentials_ReturnsToken));
-        var service  = new AuthService(db, TestHelpers.CreateConfig());
+        using var db = Helpers.InMemoryDb(nameof(Login_CorrectCredentials_ReturnsTokens));
+        var svc      = Helpers.MakeAuthService(db);
 
-        await service.RegisterAsync(new RegisterRequest("charlie", "Pass1234!"));
-        var result = await service.LoginAsync(new LoginRequest("charlie", "Pass1234!"));
+        await svc.RegisterAsync(new RegisterRequest("charlie", "Pass1234!", null), null);
+        var result = await svc.LoginAsync(new LoginRequest("charlie", "Pass1234!"), null);
 
         result.Should().NotBeNull();
-        result!.Token.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
-    public async Task Login_WithWrongPassword_ReturnsNull()
+    public async Task Login_WrongPassword_ReturnsNull()
     {
-        using var db = TestHelpers.CreateInMemoryDb(nameof(Login_WithWrongPassword_ReturnsNull));
-        var service  = new AuthService(db, TestHelpers.CreateConfig());
+        using var db = Helpers.InMemoryDb(nameof(Login_WrongPassword_ReturnsNull));
+        var svc      = Helpers.MakeAuthService(db);
 
-        await service.RegisterAsync(new RegisterRequest("dave", "RealPass1!"));
-        var result = await service.LoginAsync(new LoginRequest("dave", "WrongPass1!"));
+        await svc.RegisterAsync(new RegisterRequest("dave", "RealPass1!", null), null);
+        var result = await svc.LoginAsync(new LoginRequest("dave", "WrongPass1!"), null);
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task Login_WithNonExistentUser_ReturnsNull()
+    public async Task Refresh_ValidToken_ReturnsNewTokens()
     {
-        using var db = TestHelpers.CreateInMemoryDb(nameof(Login_WithNonExistentUser_ReturnsNull));
-        var service  = new AuthService(db, TestHelpers.CreateConfig());
+        using var db = Helpers.InMemoryDb(nameof(Refresh_ValidToken_ReturnsNewTokens));
+        var svc      = Helpers.MakeAuthService(db);
 
-        var result = await service.LoginAsync(new LoginRequest("nobody", "Whatever1!"));
+        var reg     = await svc.RegisterAsync(new RegisterRequest("eve", "Pass1234!", null), null);
+        var result  = await svc.RefreshAsync(reg!.RefreshToken, null);
 
+        result.Should().NotBeNull();
+        result!.AccessToken.Should().NotBe(reg.AccessToken);
+    }
+
+    [Fact]
+    public async Task Refresh_InvalidToken_ReturnsNull()
+    {
+        using var db = Helpers.InMemoryDb(nameof(Refresh_InvalidToken_ReturnsNull));
+        var svc      = Helpers.MakeAuthService(db);
+
+        var result = await svc.RefreshAsync("fake-token", null);
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task VerifyEmail_ValidToken_ReturnsTrue()
+    {
+        using var db = Helpers.InMemoryDb(nameof(VerifyEmail_ValidToken_ReturnsTrue));
+        var svc      = Helpers.MakeAuthService(db);
+
+        await svc.RegisterAsync(new RegisterRequest("frank", "Pass1234!", "frank@test.com"), null);
+        var user = await db.Users.FirstAsync(u => u.Username == "frank");
+
+        var ok = await svc.VerifyEmailAsync(user.VerificationToken!);
+        ok.Should().BeTrue();
+
+        var updated = await db.Users.FindAsync(user.Id);
+        updated!.EmailVerified.Should().BeTrue();
     }
 }
 
@@ -104,77 +138,131 @@ public class AuthServiceTests
 
 public class PostServiceTests
 {
-    private static async Task<AppDbContext> DbWithUserAsync(string dbName)
+    private static async Task<AppDbContext> DbWithUser(string name)
     {
-        var db   = TestHelpers.CreateInMemoryDb(dbName);
+        var db = Helpers.InMemoryDb(name);
         db.Users.Add(new User
         {
-            Id           = 1,
-            Username     = "testuser",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("x"),
-            Role         = "User"
+            Id = 1, Username = "testuser",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("x"), Role = "User"
         });
         await db.SaveChangesAsync();
         return db;
     }
 
     [Fact]
-    public async Task CreatePost_ReturnsPostWithCorrectAuthor()
+    public async Task Create_ReturnsPostWithAuthor()
     {
-        using var db = await DbWithUserAsync(nameof(CreatePost_ReturnsPostWithCorrectAuthor));
-        var service  = new PostService(db);
+        using var db = await DbWithUser(nameof(Create_ReturnsPostWithAuthor));
+        var svc      = new PostService(db);
 
-        var result = await service.CreateAsync(
-            new CreatePostRequest("Hello", "World content"), authorId: 1);
+        var result = await svc.CreateAsync(new CreatePostRequest("Title", "Content"), 1, null);
 
-        result.Title.Should().Be("Hello");
+        result.Title.Should().Be("Title");
         result.AuthorUsername.Should().Be("testuser");
     }
 
     [Fact]
-    public async Task GetAll_ReturnsAllPosts()
+    public async Task GetAll_Paged_ReturnsCorrectPage()
     {
-        using var db = await DbWithUserAsync(nameof(GetAll_ReturnsAllPosts));
-        var service  = new PostService(db);
+        using var db = await DbWithUser(nameof(GetAll_Paged_ReturnsCorrectPage));
+        var svc      = new PostService(db);
 
-        await service.CreateAsync(new CreatePostRequest("A", "Content A"), 1);
-        await service.CreateAsync(new CreatePostRequest("B", "Content B"), 1);
+        for (int i = 1; i <= 15; i++)
+            await svc.CreateAsync(new CreatePostRequest($"Post {i}", "Content"), 1, null);
 
-        var all = await service.GetAllAsync();
-        all.Should().HaveCount(2);
+        var page1 = await svc.GetAllAsync(1, 10, null, null);
+        var page2 = await svc.GetAllAsync(2, 10, null, null);
+
+        page1.Items.Count().Should().Be(10);
+        page2.Items.Count().Should().Be(5);
+        page1.TotalCount.Should().Be(15);
+        page1.TotalPages.Should().Be(2);
     }
 
     [Fact]
-    public async Task UpdatePost_ByNonOwner_NonAdmin_ReturnsNull()
+    public async Task GetAll_Search_FiltersCorrectly()
     {
-        // Security test: a different user must not update someone else's post
-        using var db = await DbWithUserAsync(nameof(UpdatePost_ByNonOwner_NonAdmin_ReturnsNull));
+        using var db = await DbWithUser(nameof(GetAll_Search_FiltersCorrectly));
+        var svc      = new PostService(db);
 
-        // Add attacker user
+        await svc.CreateAsync(new CreatePostRequest("Hello World", "Content A"), 1, null);
+        await svc.CreateAsync(new CreatePostRequest("Goodbye",     "Content B"), 1, null);
+
+        var result = await svc.GetAllAsync(1, 10, "hello", null);
+        result.Items.Should().HaveCount(1);
+        result.Items.First().Title.Should().Be("Hello World");
+    }
+
+    [Fact]
+    public async Task Update_ByNonOwner_ReturnsNull()
+    {
+        using var db = await DbWithUser(nameof(Update_ByNonOwner_ReturnsNull));
         db.Users.Add(new User { Id = 2, Username = "attacker",
             PasswordHash = "x", Role = "User" });
         await db.SaveChangesAsync();
 
-        var service = new PostService(db);
-        var post    = await service.CreateAsync(new CreatePostRequest("Title", "Content"), authorId: 1);
+        var svc  = new PostService(db);
+        var post = await svc.CreateAsync(new CreatePostRequest("T", "C"), 1, null);
 
-        // Attacker tries to update
-        var result = await service.UpdateAsync(
-            post.Id, new UpdatePostRequest("Hacked", "Hacked content"),
-            requesterId: 2, requesterRole: "User");
+        var result = await svc.UpdateAsync(post.Id,
+            new UpdatePostRequest("Hacked", "Hacked"), 2, "User");
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task DeletePost_ByAdmin_Succeeds()
+    public async Task Delete_ByAdmin_Succeeds()
     {
-        using var db = await DbWithUserAsync(nameof(DeletePost_ByAdmin_Succeeds));
-        var service  = new PostService(db);
+        using var db = await DbWithUser(nameof(Delete_ByAdmin_Succeeds));
+        var svc      = new PostService(db);
+        var post     = await svc.CreateAsync(new CreatePostRequest("X", "Y"), 1, null);
 
-        var post    = await service.CreateAsync(new CreatePostRequest("X", "Y"), authorId: 1);
-        var deleted = await service.DeleteAsync(post.Id, requesterId: 99, requesterRole: "Admin");
+        var ok = await svc.DeleteAsync(post.Id, 999, "Admin");
+        ok.Should().BeTrue();
+    }
+}
 
-        deleted.Should().BeTrue();
+// ── CommentService tests ───────────────────────────────────────────────────
+
+public class CommentServiceTests
+{
+    private static async Task<(AppDbContext db, int postId)> Setup(string name)
+    {
+        var db = Helpers.InMemoryDb(name);
+        db.Users.Add(new User { Id = 1, Username = "user1",
+            PasswordHash = "x", Role = "User" });
+        var post = new Post { Title = "T", Content = "C", AuthorId = 1 };
+        db.Posts.Add(post);
+        await db.SaveChangesAsync();
+        return (db, post.Id);
+    }
+
+    [Fact]
+    public async Task CreateComment_OnValidPost_Succeeds()
+    {
+        var (db, postId) = await Setup(nameof(CreateComment_OnValidPost_Succeeds));
+        var svc          = new CommentService(db);
+
+        var result = await svc.CreateAsync(postId,
+            new CreateCommentRequest("Great post!"), 1);
+
+        result.Should().NotBeNull();
+        result!.Content.Should().Be("Great post!");
+    }
+
+    [Fact]
+    public async Task DeleteComment_ByNonOwner_ReturnsFalse()
+    {
+        var (db, postId) = await Setup(nameof(DeleteComment_ByNonOwner_ReturnsFalse));
+        db.Users.Add(new User { Id = 2, Username = "other",
+            PasswordHash = "x", Role = "User" });
+        await db.SaveChangesAsync();
+
+        var svc     = new CommentService(db);
+        var comment = await svc.CreateAsync(postId, new CreateCommentRequest("My comment"), 1);
+
+        var ok = await svc.DeleteAsync(comment!.Id, 2, "User");
+        ok.Should().BeFalse();
     }
 }

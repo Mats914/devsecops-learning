@@ -1,8 +1,73 @@
-# 🔐 DevSecOps Demo Project
+# 🔐 DevSecOps Demo Project v2
 
-A full-stack web application demonstrating **DevSecOps principles** with a secure
-.NET 8 Web API backend, React + TypeScript frontend, and a GitHub Actions CI/CD
-pipeline with automated security gates.
+Full-stack web application demonstrating **DevSecOps best practices** with:
+- .NET 8 Web API backend
+- React + TypeScript frontend
+- GitHub Actions CI/CD pipeline with 4 security gates
+- Docker + Docker Compose for containerized deployment
+
+---
+
+## What's New in v2
+
+| Feature | Details |
+|---|---|
+| **Refresh Tokens** | Rotating JWT refresh tokens (7-day expiry) stored in memory |
+| **Rate Limiting** | IP-based rate limiting on auth endpoints (10 attempts / 5 min) |
+| **Password Strength** | Uppercase + lowercase + digit + special char required |
+| **Comments** | Full CRUD on post comments with ownership checks |
+| **Pagination** | `/api/posts?page=1&pageSize=10` |
+| **Search & Filter** | `?search=keyword&author=username` |
+| **Image Upload** | JPG/PNG upload with ImageSharp resize + MIME validation |
+| **Email Verification** | MailKit integration (disabled by default) |
+| **Audit Logging** | Every login/register/action logged with IP + timestamp |
+| **Structured Logging** | Serilog JSON logs to console + rolling file |
+| **Health Check** | `/health` endpoint for CI/CD smoke tests |
+| **Docker** | Multi-stage Dockerfiles + docker-compose.yml |
+| **Trivy Scan** | Container image vulnerability scanning in CI |
+| **Smoke Test** | CI starts the real API and hits `/health` before deploy |
+
+---
+
+## Quick Start (Development)
+
+### Prerequisites
+| Tool | Version |
+|---|---|
+| .NET SDK | 8.0+ |
+| Node.js | 20+ |
+
+### Terminal 1 — Backend
+```bash
+cd backend
+dotnet restore DevSecOpsApi.csproj
+dotnet run --project DevSecOpsApi.csproj
+# → http://localhost:5000
+# → http://localhost:5000/swagger
+```
+
+### Terminal 2 — Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+# → http://localhost:5173
+```
+
+---
+
+## Quick Start (Docker)
+
+```bash
+# Copy and edit env file
+cp .env.example .env
+# Edit JWT_KEY in .env
+
+# Start everything
+docker compose up --build
+
+# App is at http://localhost:80
+```
 
 ---
 
@@ -10,252 +75,137 @@ pipeline with automated security gates.
 
 ```
 devsecops-demo/
-├── backend/                        # .NET 8 Web API
+├── backend/
 │   ├── Controllers/
-│   │   ├── AuthController.cs       # Register / Login endpoints
-│   │   └── PostsController.cs      # CRUD posts (protected)
+│   │   ├── AuthController.cs       # register / login / refresh / revoke / verify-email
+│   │   ├── PostsController.cs      # CRUD posts + image upload
+│   │   ├── CommentsController.cs   # CRUD comments (nested under posts)
+│   │   └── HealthController.cs     # /health endpoint
 │   ├── Data/
-│   │   └── AppDbContext.cs         # EF Core + SQLite
+│   │   └── AppDbContext.cs
 │   ├── DTOs/
-│   │   └── Dtos.cs                 # Validated request/response records
+│   │   └── Dtos.cs                 # All request/response records with validation
 │   ├── Middleware/
-│   │   └── SecurityHeadersMiddleware.cs   # HTTP security headers
+│   │   └── SecurityHeadersMiddleware.cs
 │   ├── Models/
 │   │   ├── User.cs
-│   │   └── Post.cs
+│   │   ├── Post.cs
+│   │   ├── Comment.cs
+│   │   ├── RefreshToken.cs
+│   │   └── AuditLog.cs
 │   ├── Services/
-│   │   ├── AuthService.cs          # JWT generation, BCrypt hashing
-│   │   └── PostService.cs          # Business logic + authorisation
-│   ├── Tests/
-│   │   ├── DevSecOpsApi.Tests.csproj
-│   │   └── ServiceTests.cs         # xUnit tests
-│   ├── Program.cs                  # App startup + DI + middleware pipeline
-│   ├── appsettings.json
-│   └── DevSecOpsApi.csproj
+│   │   ├── AuthService.cs          # JWT + Refresh tokens + BCrypt
+│   │   ├── PostService.cs          # Pagination + Search + Image
+│   │   ├── CommentService.cs
+│   │   ├── AuditService.cs         # Audit logging
+│   │   ├── EmailService.cs         # MailKit (toggle via config)
+│   │   └── ImageService.cs         # ImageSharp resize + validation
+│   └── Tests/
+│       ├── DevSecOpsApi.Tests.csproj
+│       └── ServiceTests.cs         # 14 unit tests
 │
-├── frontend/                       # React + TypeScript (Vite)
-│   ├── src/
-│   │   ├── api/
-│   │   │   └── client.ts           # Secure API client (in-memory JWT)
-│   │   ├── components/
-│   │   │   └── Navbar.tsx
-│   │   ├── contexts/
-│   │   │   └── AuthContext.tsx     # Global auth state
-│   │   ├── pages/
-│   │   │   ├── AuthPages.tsx       # Login + Register
-│   │   │   └── PostsPage.tsx       # Post list + CRUD
-│   │   ├── test/
-│   │   │   ├── setup.ts
-│   │   │   └── validation.test.ts  # Vitest unit tests
-│   │   ├── types/index.ts
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── index.html                  # CSP meta tag
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
+├── frontend/
+│   └── src/
+│       ├── api/client.ts           # Secure API client + silent refresh
+│       ├── contexts/AuthContext.tsx # Auth state + auto refresh timer
+│       ├── hooks/usePosts.ts
+│       ├── pages/
+│       │   ├── AuthPages.tsx       # Login + Register + password strength meter
+│       │   └── PostsPage.tsx       # Posts + Comments + Pagination + Search
+│       └── test/
+│           └── validation.test.ts  # 14 frontend unit tests
 │
-└── .github/
-    └── workflows/
-        └── ci.yml                  # Full DevSecOps pipeline
+├── docker/
+│   ├── Dockerfile.backend          # Multi-stage, non-root user
+│   ├── Dockerfile.frontend         # Multi-stage, nginx
+│   └── nginx.conf
+├── docker-compose.yml
+└── .github/workflows/ci.yml        # 6-job DevSecOps pipeline
 ```
 
 ---
 
-## Quick Start
-
-### Prerequisites
-
-| Tool          | Version  |
-|---------------|----------|
-| .NET SDK      | 8.0+     |
-| Node.js       | 20+      |
-| npm           | 10+      |
-
----
-
-### 1 – Clone the repository
-
-```bash
-git clone https://github.com/<your-username>/devsecops-demo.git
-cd devsecops-demo
-```
-
-### 2 – Run the Backend
-
-```bash
-cd backend
-dotnet restore
-dotnet run
-```
-
-The API starts on **http://localhost:5000**.  
-Swagger UI is available at **http://localhost:5000/swagger**.
-
-> **JWT key** – change `Jwt:Key` in `appsettings.json` before deploying.  
-> In production always use an environment variable or secret vault:
-> ```bash
-> export Jwt__Key="your-super-secret-key-at-least-32-chars"
-> ```
-
-### 3 – Run the Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The app starts on **http://localhost:5173** and proxies `/api` → `localhost:5000`.
-
-### 4 – Run the Tests
-
-**Backend:**
-```bash
-cd backend
-dotnet test Tests/DevSecOpsApi.Tests.csproj --verbosity normal
-```
-
-**Frontend:**
-```bash
-cd frontend
-npm test
-```
-
----
-
-## DevSecOps Principles Demonstrated
-
-### 1. Shift-Left Security
-
-Security checks happen **as early as possible** in the pipeline — before any
-build artifact is produced.
+## CI/CD Pipeline — 6 Security Gates
 
 ```
-Push → Dependency Scan → SAST (CodeQL) → Build → Tests → Deploy
-         ↑ security gate    ↑ security gate
+Push / PR
+    │
+    ├── Job 1: Backend
+    │     ├── 🔒 Gate 1: dotnet vulnerability scan (High/Critical → FAIL)
+    │     ├── Build
+    │     └── 14 unit tests
+    │
+    ├── Job 2: Frontend
+    │     ├── 🔒 Gate 2: npm audit (High/Critical → FAIL)
+    │     ├── TypeScript type check
+    │     ├── ESLint
+    │     ├── 14 unit tests
+    │     └── Production build
+    │
+    ├── Job 3: CodeQL SAST
+    │     └── 🔒 Gate 3: Static analysis (C# + TypeScript)
+    │
+    ├── Job 4: Docker
+    │     └── 🔒 Gate 4: Trivy container scan (High/Critical → FAIL)
+    │
+    ├── Job 5: Smoke Test
+    │     └── 🔒 Gate 5: Start real API → /health must return 200
+    │
+    └── Job 6: Deploy (main branch only, ALL gates must pass)
+          └── GitHub Pages
 ```
-
-In `ci.yml`: the `backend` and `frontend` jobs run dependency scans **before**
-compiling or bundling code.
-
----
-
-### 2. Dependency Vulnerability Scanning
-
-| Layer    | Tool                                    | Gate level |
-|----------|-----------------------------------------|------------|
-| .NET     | `dotnet list package --vulnerable`      | High/Critical → fail |
-| Node.js  | `npm audit --audit-level=high`          | High/Critical → fail |
-
-If a HIGH or CRITICAL CVE is found in any dependency, **the pipeline fails
-immediately** and the PR/push cannot proceed.
-
----
-
-### 3. Static Application Security Testing (SAST)
-
-GitHub's **CodeQL** analyses both the C# backend and the TypeScript frontend for
-common vulnerability patterns:
-
-- SQL injection / injection attacks
-- Insecure deserialization
-- Path traversal
-- XSS sinks
-- Hardcoded credentials
-
-Results appear in the **Security → Code scanning alerts** tab.
-
----
-
-### 4. Secure API Design
-
-| Practice | Implementation |
-|---|---|
-| Password hashing | BCrypt (adaptive, timing-safe) |
-| Token-based auth | JWT with short expiry (60 min) |
-| Input validation | Data Annotations on all DTOs |
-| Generic error messages | Login returns "Invalid credentials" — not "user not found" |
-| Authorisation checks | Service layer checks ownership before mutating data |
-| HTTP security headers | `SecurityHeadersMiddleware` on every response |
-| CORS allowlist | Only the known frontend origin is allowed |
-
----
-
-### 5. Separation of Frontend and Backend Security
-
-The frontend performs **client-side validation** for UX only.  
-The backend **always re-validates** every field — never trusting the client.
-
-```
-Frontend validation → Better UX (fast feedback)
-Backend validation  → Real security (cannot be bypassed)
-```
-
-The API client (`client.ts`) stores JWTs **in memory** (not `localStorage`)
-to mitigate XSS-based token theft.
-
----
-
-### 6. Security Gates in CI/CD
-
-```yaml
-# Pipeline blocks on:
-# 1. Vulnerable .NET packages (High/Critical)
-# 2. Vulnerable npm packages (High/Critical)
-# 3. CodeQL findings
-# 4. Failed unit tests
-# 5. TypeScript type errors
-# 6. ESLint violations
-
-deploy:
-  needs: [backend, frontend, codeql]   # ALL must pass
-```
-
-The deploy job only runs on `main` and only after every security and quality
-gate has passed.
 
 ---
 
 ## API Reference
 
 | Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/register` | None | Register new user |
-| POST | `/api/auth/login` | None | Login, receive JWT |
-| GET | `/api/posts` | None | List all posts |
-| GET | `/api/posts/{id}` | None | Get one post |
-| POST | `/api/posts` | User | Create post |
-| PUT | `/api/posts/{id}` | Owner/Admin | Update post |
+|---|---|---|---|
+| POST | `/api/auth/register` | — | Register (username + password + optional email) |
+| POST | `/api/auth/login` | — | Login → access + refresh token |
+| POST | `/api/auth/refresh` | — | Rotate refresh token |
+| POST | `/api/auth/revoke` | User | Revoke refresh token (logout) |
+| GET  | `/api/auth/verify-email?token=` | — | Verify email address |
+| GET  | `/api/posts?page&pageSize&search&author` | — | Paginated post list |
+| GET  | `/api/posts/{id}` | — | Single post (increments view count) |
+| POST | `/api/posts` (multipart) | User | Create post with optional image |
+| PUT  | `/api/posts/{id}` | Owner/Admin | Update post |
 | DELETE | `/api/posts/{id}` | Owner/Admin | Delete post |
-
----
-
-## Security Checklist
-
-- [x] Passwords hashed with BCrypt
-- [x] JWT signed with HMAC-SHA256
-- [x] JWT expiry enforced (60 minutes, no clock skew)
-- [x] Generic auth error messages (no username enumeration)
-- [x] Input validation on all endpoints
-- [x] Ownership check before mutate/delete
-- [x] HTTP security headers on every response
-- [x] CORS restricted to known origins
-- [x] Frontend JWT stored in memory (not localStorage)
-- [x] Dependency scanning in CI (backend + frontend)
-- [x] SAST with CodeQL in CI
-- [x] Security gates block merge on failure
+| GET  | `/api/posts/{id}/comments` | — | List comments |
+| POST | `/api/posts/{id}/comments` | User | Add comment |
+| PUT  | `/api/posts/{id}/comments/{cid}` | Owner/Admin | Edit comment |
+| DELETE | `/api/posts/{id}/comments/{cid}` | Owner/Admin | Delete comment |
+| GET  | `/health` | — | Health check |
 
 ---
 
 ## Environment Variables (Production)
 
-| Variable | Description |
-|---|---|
-| `Jwt__Key` | JWT signing secret (min 32 chars) |
-| `Jwt__Issuer` | JWT issuer string |
-| `Jwt__Audience` | JWT audience string |
-| `ConnectionStrings__DefaultConnection` | SQLite or other DB connection string |
+```bash
+# Required
+JWT_KEY=your-super-secret-key-min-32-chars
 
-Never commit secrets. Use GitHub Actions Secrets or a vault in production.
+# Optional
+Email__Enabled=true
+Email__SmtpHost=smtp.gmail.com
+Email__SmtpPort=587
+Email__Username=you@gmail.com
+Email__Password=app-password
+```
+
+Never commit secrets. Use GitHub Secrets or a vault.
+
+---
+
+## DevSecOps Principles Applied
+
+| Principle | Implementation |
+|---|---|
+| Shift-Left Security | Vulnerability scans run BEFORE build |
+| Defence in Depth | Client + server validation; ownership checks at service layer |
+| Least Privilege | Docker containers run as non-root user |
+| Security Gates | 5 gates block unsafe builds from reaching deploy |
+| Secure Defaults | HTTPOnly-equivalent in-memory token storage; short-lived JWTs |
+| Audit Trail | Every sensitive action logged with IP and outcome |
+| Zero Trust | Every API call re-validates JWT; frontend cannot be trusted |
+| Container Security | Multi-stage builds; Trivy scan; minimal runtime image |

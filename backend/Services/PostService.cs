@@ -5,99 +5,112 @@ using DevSecOpsApi.Models;
 
 namespace DevSecOpsApi.Services;
 
-// ── Interface ──────────────────────────────────────────────────────────────
-
 public interface IPostService
 {
-    Task<IEnumerable<PostResponse>> GetAllAsync();
-    Task<PostResponse?>             GetByIdAsync(int id);
-    Task<PostResponse>              CreateAsync(CreatePostRequest request, int authorId);
-    Task<PostResponse?>             UpdateAsync(int id, UpdatePostRequest request, int requesterId, string requesterRole);
-    Task<bool>                      DeleteAsync(int id, int requesterId, string requesterRole);
+    Task<PostsPagedResponse>  GetAllAsync(int page, int pageSize, string? search, string? author);
+    Task<PostResponse?>        GetByIdAsync(int id);
+    Task<PostResponse>         CreateAsync(CreatePostRequest req, int authorId, string? imagePath);
+    Task<PostResponse?>        UpdateAsync(int id, UpdatePostRequest req, int requesterId, string role);
+    Task<bool>                 DeleteAsync(int id, int requesterId, string role);
 }
-
-// ── Implementation ─────────────────────────────────────────────────────────
 
 public class PostService(AppDbContext db) : IPostService
 {
-    public async Task<IEnumerable<PostResponse>> GetAllAsync()
+    public async Task<PostsPagedResponse> GetAllAsync(int page, int pageSize, string? search, string? author)
     {
-        return await db.Posts
+        page     = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 50);
+
+        var query = db.Posts
             .Include(p => p.Author)
+            .Include(p => p.Comments)
+            .Where(p => p.IsPublished)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            query = query.Where(p =>
+                p.Title.ToLower().Contains(s) ||
+                p.Content.ToLower().Contains(s));
+        }
+
+        if (!string.IsNullOrWhiteSpace(author))
+        {
+            var a = author.Trim().ToLower();
+            query = query.Where(p => p.Author.Username.ToLower() == a);
+        }
+
+        var total = await query.CountAsync();
+        var items = await query
             .OrderByDescending(p => p.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(p => ToResponse(p))
             .ToListAsync();
+
+        return new PostsPagedResponse(items, page, pageSize, total,
+            (int)Math.Ceiling((double)total / pageSize));
     }
 
     public async Task<PostResponse?> GetByIdAsync(int id)
     {
         var post = await db.Posts
             .Include(p => p.Author)
-            .FirstOrDefaultAsync(p => p.Id == id);
-
-        return post is null ? null : ToResponse(post);
-    }
-
-    public async Task<PostResponse> CreateAsync(CreatePostRequest request, int authorId)
-    {
-        var post = new Post
-        {
-            Title    = request.Title.Trim(),
-            Content  = request.Content.Trim(),
-            AuthorId = authorId
-        };
-
-        db.Posts.Add(post);
-        await db.SaveChangesAsync();
-        await db.Entry(post).Reference(p => p.Author).LoadAsync();
-
-        return ToResponse(post);
-    }
-
-    public async Task<PostResponse?> UpdateAsync(
-        int id, UpdatePostRequest request,
-        int requesterId, string requesterRole)
-    {
-        var post = await db.Posts
-            .Include(p => p.Author)
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .Include(p => p.Comments)
+            .FirstOrDefaultAsync(p => p.Id == id && p.IsPublished);
 
         if (post is null) return null;
 
-        // Security: only author or admin may update
-        if (post.AuthorId != requesterId && requesterRole != "Admin")
-            return null;
+        // Increment view count
+        post.ViewCount++;
+        await db.SaveChangesAsync();
 
-        post.Title     = request.Title.Trim();
-        post.Content   = request.Content.Trim();
+        return ToResponse(post);
+    }
+
+    public async Task<PostResponse> CreateAsync(CreatePostRequest req, int authorId, string? imagePath)
+    {
+        var post = new Post
+        {
+            Title     = req.Title.Trim(),
+            Content   = req.Content.Trim(),
+            AuthorId  = authorId,
+            ImagePath = imagePath
+        };
+        db.Posts.Add(post);
+        await db.SaveChangesAsync();
+        await db.Entry(post).Reference(p => p.Author).LoadAsync();
+        return ToResponse(post);
+    }
+
+    public async Task<PostResponse?> UpdateAsync(int id, UpdatePostRequest req, int requesterId, string role)
+    {
+        var post = await db.Posts.Include(p => p.Author).Include(p => p.Comments)
+                                  .FirstOrDefaultAsync(p => p.Id == id);
+        if (post is null) return null;
+        if (post.AuthorId != requesterId && role != "Admin") return null;
+
+        post.Title     = req.Title.Trim();
+        post.Content   = req.Content.Trim();
         post.UpdatedAt = DateTime.UtcNow;
-
         await db.SaveChangesAsync();
         return ToResponse(post);
     }
 
-    public async Task<bool> DeleteAsync(int id, int requesterId, string requesterRole)
+    public async Task<bool> DeleteAsync(int id, int requesterId, string role)
     {
         var post = await db.Posts.FindAsync(id);
-
         if (post is null) return false;
-
-        // Security: only author or admin may delete
-        if (post.AuthorId != requesterId && requesterRole != "Admin")
-            return false;
-
+        if (post.AuthorId != requesterId && role != "Admin") return false;
         db.Posts.Remove(post);
         await db.SaveChangesAsync();
         return true;
     }
 
-    // ── Projection helper (no AutoMapper dependency) ───────────────────────
     private static PostResponse ToResponse(Post p) => new(
-        p.Id,
-        p.Title,
-        p.Content,
-        p.Author.Username,
-        p.CreatedAt,
-        p.UpdatedAt
-    );
+        p.Id, p.Title, p.Content,
+        p.ImagePath is not null ? $"/uploads/{p.ImagePath}" : null,
+        p.Author.Username, p.ViewCount, p.Comments.Count,
+        p.CreatedAt, p.UpdatedAt);
 }
