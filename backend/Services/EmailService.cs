@@ -48,18 +48,32 @@ public class EmailService(IConfiguration config, ILogger<EmailService> logger) :
 
         try
         {
+            var fromName    = config["Email:FromName"] ?? "DevSecOps Demo";
+            var fromAddress = config["Email:FromAddress"];
+            var smtpHost    = config["Email:SmtpHost"];
+            var username    = config["Email:Username"];
+            var password    = config["Email:Password"];
+
+            if (string.IsNullOrWhiteSpace(fromAddress) ||
+                string.IsNullOrWhiteSpace(smtpHost) ||
+                string.IsNullOrWhiteSpace(username) ||
+                string.IsNullOrWhiteSpace(password))
+            {
+                logger.LogWarning("Email enabled but SMTP configuration is incomplete");
+                return;
+            }
+
             var message = new MimeMessage();
-            message.From.Add(new MailboxAddress(
-                config["Email:FromName"], config["Email:FromAddress"]));
+            message.From.Add(new MailboxAddress(fromName, fromAddress));
             message.To.Add(MailboxAddress.Parse(to));
             message.Subject = subject;
             message.Body    = new TextPart("html") { Text = htmlBody };
 
             using var smtp = new SmtpClient();
-            await smtp.ConnectAsync(config["Email:SmtpHost"],
+            await smtp.ConnectAsync(smtpHost,
                 config.GetValue<int>("Email:SmtpPort"),
                 SecureSocketOptions.StartTls);
-            await smtp.AuthenticateAsync(config["Email:Username"], config["Email:Password"]);
+            await smtp.AuthenticateAsync(username, password);
             await smtp.SendAsync(message);
             await smtp.DisconnectAsync(true);
         }

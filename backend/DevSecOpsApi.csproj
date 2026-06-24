@@ -18,38 +18,39 @@
   <ItemGroup>
     <!-- Auth & Security -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt"               Version="8.6.1"  />
-    <PackageReference Include="BCrypt.Net-Next"                                Version="4.0.3"  />
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.9" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.6.1" />
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <!--
+      SQLite native lib override:
+      EF Core Sqlite pulls SQLitePCLRaw.lib.e_sqlite3 2.x transitively (SQLite < 3.50.2).
+      Pin 3.50.3 to fix GHSA-2m69-gcr7-jv3q / CVE-2025-6965 until upstream updates.
+    -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
 
     <!-- Database -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite"           Version="8.0.15" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"           Version="8.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.15" />
 
     <!-- Rate Limiting -->
-    <PackageReference Include="AspNetCoreRateLimit"                            Version="5.0.0"  />
+    <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
 
     <!-- Logging -->
-    <PackageReference Include="Serilog.AspNetCore"                             Version="8.0.3"  />
-    <PackageReference Include="Serilog.Sinks.Console"                          Version="6.0.0"  />
-    <PackageReference Include="Serilog.Sinks.File"                             Version="6.0.0"  />
-    <PackageReference Include="Serilog.Formatting.Compact"                     Version="3.0.0"  />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
 
     <!-- Health Checks -->
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.15" />
 
     <!--
-      EMAIL: MailKit 4.9.0 fixes GHSA-9j88-vvj5-vhgr (Moderate)
-      Also pulls in patched MimeKit + BouncyCastle transitively
+      EMAIL: MailKit 4.17.0 — current patched release
     -->
-    <PackageReference Include="MailKit" Version="4.9.0" />
+    <PackageReference Include="MailKit" Version="4.17.0" />
 
-    <!--
-      IMAGE: SixLabors.ImageSharp 3.1.7 fixes:
-        GHSA-63p8-c4ww-9cg7 (High)  - fixed in 3.1.5
-        GHSA-2cmq-823j-5qj8 (High)  - fixed in 3.1.5
-        + 4x Moderate CVEs
-    -->
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
+    <!-- IMAGE: SixLabors.ImageSharp 3.1.12 (free OSS line; 4.x requires paid license) -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 
     <!-- Swagger -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />

@@ -39,7 +39,7 @@ jobs:
           cat vuln-report.txt
 
           # Count High/Critical lines in the table output
-          # Table rows look like:  "   > PackageName   x.y.z   High   https://..."
+          # Table rows look like: "   > PackageName   x.y.z   High   https://..."
           HIGH_COUNT=$(grep -cE "High|Critical" vuln-report.txt || true)
 
           if [ "$HIGH_COUNT" -gt "0" ]; then
@@ -85,13 +85,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '${{ env.NODE_VERSION }}'
-          # NOTE: cache is intentionally omitted here.
-          # npm cache requires a committed package-lock.json.
-          # Run "npm install" locally and commit the lockfile to enable caching.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
 
       # ── SECURITY GATE 2: npm audit ───────────────────────────────────────
       - name: 🔒 npm dependency audit

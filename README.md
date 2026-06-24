@@ -113,7 +113,7 @@ devsecops-demo/
 │       │   ├── AuthPages.tsx       # Login + Register + password strength meter
 │       │   └── PostsPage.tsx       # Posts + Comments + Pagination + Search
 │       └── test/
-│           └── validation.test.ts  # 14 frontend unit tests
+│           └── validation.test.ts  # 17 frontend unit tests
 │
 ├── docker/
 │   ├── Dockerfile.backend          # Multi-stage, non-root user
@@ -139,7 +139,7 @@ Push / PR
     │     ├── 🔒 Gate 2: npm audit (High/Critical → FAIL)
     │     ├── TypeScript type check
     │     ├── ESLint
-    │     ├── 14 unit tests
+    │     ├── 17 unit tests
     │     └── Production build
     │
     ├── Job 3: CodeQL SAST

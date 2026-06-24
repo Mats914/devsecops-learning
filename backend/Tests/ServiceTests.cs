@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Xunit;
 using DevSecOpsApi.Data;
 using DevSecOpsApi.DTOs;
 using DevSecOpsApi.Models;
@@ -104,7 +105,9 @@ public class AuthServiceTests
         var result  = await svc.RefreshAsync(reg!.RefreshToken, null);
 
         result.Should().NotBeNull();
-        result!.AccessToken.Should().NotBe(reg.AccessToken);
+        result!.RefreshToken.Should().NotBe(reg.RefreshToken);
+        var oldToken = await db.RefreshTokens.FirstAsync(t => t.Token == reg.RefreshToken);
+        oldToken.IsRevoked.Should().BeTrue();
     }
 
     [Fact]
