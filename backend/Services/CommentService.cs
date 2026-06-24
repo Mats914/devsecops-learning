@@ -1,3 +1,6 @@
+// CommentService.cs – kommentarer kopplade till inlägg.
+// Samma mönster som PostService: ägare eller Admin får ändra/radera.
+
 using Microsoft.EntityFrameworkCore;
 using DevSecOpsApi.Data;
 using DevSecOpsApi.DTOs;
@@ -13,6 +16,9 @@ public interface ICommentService
     Task<bool>                         DeleteAsync(int id, int requesterId, string role);
 }
 
+/// <summary>
+/// Hanterar kommentarer under ett visst inlägg.
+/// </summary>
 public class CommentService(AppDbContext db) : ICommentService
 {
     public async Task<IEnumerable<CommentResponse>> GetByPostAsync(int postId) =>
@@ -25,6 +31,7 @@ public class CommentService(AppDbContext db) : ICommentService
 
     public async Task<CommentResponse?> CreateAsync(int postId, CreateCommentRequest req, int authorId)
     {
+        // Man kan bara kommentera på publicerade inlägg
         var postExists = await db.Posts.AnyAsync(p => p.Id == postId && p.IsPublished);
         if (!postExists) return null;
 

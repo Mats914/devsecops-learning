@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { authApi, tokenStore } from '../api/client';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '../types';
 
+// Användarinfo vi sparar i context (inte hela JWT – bara det UI behöver)
 interface User { username: string; role: string; emailVerified: boolean; }
 
 interface AuthContextValue {
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
+  // Gemensam logik efter lyckad login/register/refresh
   const applyAuth = useCallback((res: AuthResponse) => {
     tokenStore.setTokens(res.accessToken, res.refreshToken);
     setUser({ username: res.username, role: res.role, emailVerified: res.emailVerified });
@@ -33,12 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     const rt = tokenStore.getRefresh();
+    // Försök ogiltigförklara refresh token på servern (ignorera fel om nätverket strular)
     if (rt) await authApi.revoke(rt).catch(() => {});
     tokenStore.clearTokens();
     setUser(null);
   }, []);
 
-  // Keep session alive: silent refresh before expiry
+  // Håll sessionen vid liv – refresha innan access token går ut
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(async () => {
@@ -50,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         logout();
       }
-    }, 12 * 60 * 1000); // refresh every 12 min (access token = 15 min)
+    }, 12 * 60 * 1000); // var 12:e minut (access token håller i 15 min)
     return () => clearInterval(interval);
   }, [user, applyAuth, logout]);
 
@@ -68,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Hook för att hämta auth-state – kraschar om man glömmer AuthProvider
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be inside AuthProvider');

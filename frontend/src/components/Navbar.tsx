@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
+// Navigationsfält – visar olika länkar beroende på om man är inloggad
 export function Navbar() {
   const { user, logout, isAuthenticated, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export function Navbar() {
       <div className="nav-links">
         {isAuthenticated ? (
           <>
+            {/* Varning om e-post inte verifierats än */}
             {!user?.emailVerified && (
               <span className="badge-warn" title="Check your email to verify your account">
                 ⚠ Unverified

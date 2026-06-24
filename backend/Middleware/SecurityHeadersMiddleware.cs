@@ -1,8 +1,10 @@
+// SecurityHeadersMiddleware.cs – lägger på säkerhetsheaders och loggar varje request.
+// Körs tidigt i pipelinen (shift-left) innan controllerna.
+
 namespace DevSecOpsApi.Middleware;
 
 /// <summary>
-/// Applies HTTP security headers and structured request logging on every response.
-/// Shift-left: runs before any controller code.
+/// Sätter HTTP-säkerhetsheaders på alla svar och loggar metod, path, status och tid.
 /// </summary>
 public class SecurityHeadersMiddleware(RequestDelegate next, ILogger<SecurityHeadersMiddleware> logger)
 {
@@ -16,7 +18,7 @@ public class SecurityHeadersMiddleware(RequestDelegate next, ILogger<SecurityHea
         headers["Content-Security-Policy"]   = "default-src 'none'; frame-ancestors 'none'";
         headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
         headers["Permissions-Policy"]        = "camera=(), microphone=(), geolocation=()";
-        headers.Remove("Server");
+        headers.Remove("Server");  // dölj server-header så angripare får mindre info
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         await next(ctx);

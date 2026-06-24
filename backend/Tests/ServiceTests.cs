@@ -1,3 +1,6 @@
+// ServiceTests.cs – enhetstester för AuthService, PostService och CommentService.
+// Använder in-memory-databas och mockade beroenden där det behövs.
+
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -41,7 +44,7 @@ file static class Helpers
     }
 }
 
-// ── AuthService tests ──────────────────────────────────────────────────────
+// ── AuthService-tester ─────────────────────────────────────────────────────
 
 public class AuthServiceTests
 {
@@ -137,7 +140,7 @@ public class AuthServiceTests
     }
 }
 
-// ── PostService tests ──────────────────────────────────────────────────────
+// ── PostService-tester ─────────────────────────────────────────────────────
 
 public class PostServiceTests
 {
@@ -226,7 +229,7 @@ public class PostServiceTests
     }
 }
 
-// ── CommentService tests ───────────────────────────────────────────────────
+// ── CommentService-tester ──────────────────────────────────────────────────
 
 public class CommentServiceTests
 {

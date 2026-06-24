@@ -16,61 +16,55 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Auth & Security -->
+    <!-- Autentisering och säkerhet -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
     <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.9" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.6.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <!--
-      SQLite native lib override:
-      EF Core Sqlite pulls SQLitePCLRaw.lib.e_sqlite3 2.x transitively (SQLite < 3.50.2).
-      Pin 3.50.3 to fix GHSA-2m69-gcr7-jv3q / CVE-2025-6965 until upstream updates.
+      Överskriver transitiv SQLite-bibliotek:
+      EF Core Sqlite drar in SQLitePCLRaw 2.x (SQLite < 3.50.2).
+      Pin 3.50.3 fixar GHSA-2m69-gcr7-jv3q tills upstream uppdaterar.
     -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
 
-    <!-- Database -->
+    <!-- Databas -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.15" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.15" />
 
-    <!-- Rate Limiting -->
+    <!-- Begränsar antal försök mot auth-endpoints -->
     <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
 
-    <!-- Logging -->
+    <!-- Strukturerad loggning -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
 
-    <!-- Health Checks -->
+    <!-- Hälsokontroll för CI/CD smoke test -->
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.15" />
 
-    <!--
-      EMAIL: MailKit 4.17.0 — current patched release
-    -->
+    <!-- E-post (MailKit) – avstängt som standard i dev -->
     <PackageReference Include="MailKit" Version="4.17.0" />
 
-    <!-- IMAGE: SixLabors.ImageSharp 3.1.12 (free OSS line; 4.x requires paid license) -->
+    <!-- Bildbehandling – 3.x är gratis, 4.x kräver licens -->
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 
-    <!-- Swagger -->
+    <!-- API-dokumentation i utvecklingsläge -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
 
     <!--
-      FORCE transitive deps to patched versions.
-      dotnet resolves the LOWEST compatible version by default,
-      so we must explicitly pin these to override vulnerable versions.
+      Tvinga transitiva beroenden till patchade versioner.
+      dotnet väljer lägsta kompatibla version som standard.
     -->
 
-    <!-- System.Text.Json 8.0.5 fixes GHSA-hh2w-p6rv-4g7w + GHSA-8g4q-xg66-9fp4 (both High) -->
+    <!-- System.Text.Json 8.0.5 – fixar två High-sårbarheter -->
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
 
-    <!-- System.Formats.Asn1 8.0.1 fixes GHSA-447r-wph3-92pm (High) -->
+    <!-- System.Formats.Asn1 8.0.1 – fixar High-sårbarhet -->
     <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
 
-    <!--
-      Microsoft.Extensions.Caching.Memory 9.0.5 fixes GHSA-qj66-m88j-hmgj (High)
-      Note: 9.x is compatible with .NET 8 apps
-    -->
+    <!-- Caching.Memory 9.x fungerar med .NET 8 och fixar High-sårbarhet -->
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.5" />
   </ItemGroup>
 

@@ -1,4 +1,4 @@
-# ── Stage 1: Build ─────────────────────────────────────────────────────────
+# ── Steg 1: Bygg React-appen ────────────────────────────────────────────────
 FROM node:20-alpine AS build
 WORKDIR /app
 
@@ -8,16 +8,16 @@ RUN npm ci --only=production=false
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Serve with Nginx ──────────────────────────────────────────────
+# ── Steg 2: Servera med Nginx ───────────────────────────────────────────────
 FROM nginx:alpine AS runtime
 
-# Security: remove default nginx config
+# Ta bort standardkonfigurationen
 RUN rm /etc/nginx/conf.d/default.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Security: run as non-root
+# Säkerhet: kör som icke-root
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
     chown -R nginx:nginx /var/cache/nginx && \
     chown -R nginx:nginx /var/log/nginx && \

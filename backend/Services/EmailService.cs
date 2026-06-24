@@ -1,3 +1,6 @@
+// EmailService.cs – skickar verifierings- och återställningsmail via SMTP (MailKit).
+// Kan stängas av i config så man slipper riktig mailserver under utveckling.
+
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
@@ -10,6 +13,9 @@ public interface IEmailService
     Task SendPasswordResetEmailAsync(string toEmail, string username, string token);
 }
 
+/// <summary>
+/// E-postutskick – loggar bara om Email:Enabled är false.
+/// </summary>
 public class EmailService(IConfiguration config, ILogger<EmailService> logger) : IEmailService
 {
     private readonly bool _enabled = config.GetValue<bool>("Email:Enabled");
@@ -54,6 +60,7 @@ public class EmailService(IConfiguration config, ILogger<EmailService> logger) :
             var username    = config["Email:Username"];
             var password    = config["Email:Password"];
 
+            // Saknas SMTP-uppgifter → avbryt tyst med varning i loggen
             if (string.IsNullOrWhiteSpace(fromAddress) ||
                 string.IsNullOrWhiteSpace(smtpHost) ||
                 string.IsNullOrWhiteSpace(username) ||
@@ -79,6 +86,7 @@ public class EmailService(IConfiguration config, ILogger<EmailService> logger) :
         }
         catch (Exception ex)
         {
+            // Mail ska inte krascha hela appen om SMTP strular
             logger.LogError(ex, "Failed to send email to {To}", to);
         }
     }

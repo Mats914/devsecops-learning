@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { tokenStore } from '../api/client';
 
-// ── tokenStore ─────────────────────────────────────────────────────────────
+// ── tokenStore – minneslagring av JWT ────────────────────────────────────────
 
 describe('tokenStore', () => {
   beforeEach(() => tokenStore.clearTokens());
@@ -25,8 +25,9 @@ describe('tokenStore', () => {
   });
 });
 
-// ── Username validation ────────────────────────────────────────────────────
+// ── Validering av användarnamn ───────────────────────────────────────────────
 
+// Kopierad logik från AuthPages – testas här isolerat
 function validateUsername(v: string): string | null {
   if (v.length < 3)  return 'Min 3 characters';
   if (v.length > 50) return 'Max 50 characters';
@@ -42,7 +43,7 @@ describe('validateUsername', () => {
   it('accepts underscores and digits',   () => expect(validateUsername('user_123')).toBeNull());
 });
 
-// ── Password strength validation ───────────────────────────────────────────
+// ── Validering av lösenord ───────────────────────────────────────────────────
 
 function validatePassword(v: string): string | null {
   if (v.length < 8)       return 'Min 8 characters';
@@ -61,7 +62,7 @@ describe('validatePassword', () => {
   it('rejects missing special char',     () => expect(validatePassword('Secure123')).not.toBeNull());
 });
 
-// ── Password strength meter ────────────────────────────────────────────────
+// ── Lösenordsstyrka (samma som calcStrength i RegisterPage) ────────────────
 
 function calcStrength(p: string): number {
   let s = 0;

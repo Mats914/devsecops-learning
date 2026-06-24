@@ -1,4 +1,4 @@
-// ── Auth ───────────────────────────────────────────────────────────────────
+// ── Auth – typer för inloggning och tokens ───────────────────────────────────
 
 export interface AuthResponse {
   accessToken: string;
@@ -12,7 +12,7 @@ export interface AuthResponse {
 export interface LoginRequest    { username: string; password: string; }
 export interface RegisterRequest { username: string; password: string; email?: string; }
 
-// ── Posts ──────────────────────────────────────────────────────────────────
+// ── Inlägg (posts) ───────────────────────────────────────────────────────────
 
 export interface Post {
   id: number;
@@ -37,7 +37,7 @@ export interface PostsPagedResponse {
 export interface CreatePostRequest { title: string; content: string; }
 export interface UpdatePostRequest { title: string; content: string; }
 
-// ── Comments ───────────────────────────────────────────────────────────────
+// ── Kommentarer ──────────────────────────────────────────────────────────────
 
 export interface Comment {
   id: number;
@@ -49,7 +49,7 @@ export interface Comment {
 
 export interface CreateCommentRequest { content: string; }
 
-// ── Misc ───────────────────────────────────────────────────────────────────
+// ── Övrigt ───────────────────────────────────────────────────────────────────
 
 export interface ApiError { message: string; status?: number; }
 

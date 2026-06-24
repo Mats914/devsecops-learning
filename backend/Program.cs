@@ -1,3 +1,6 @@
+// Program.cs – startpunkt för hela API:t.
+// Här konfigurerar vi JWT, databas, rate limiting, CORS och middleware-pipelinen.
+
 using System.Text;
 using AspNetCoreRateLimit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -12,7 +15,7 @@ using DevSecOpsApi.Data;
 using DevSecOpsApi.Middleware;
 using DevSecOpsApi.Services;
 
-// ── Serilog bootstrap ──────────────────────────────────────────────────────
+// Serilog – loggar till konsol och fil i JSON-format
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(new CompactJsonFormatter())
     .WriteTo.File(new CompactJsonFormatter(), "logs/app-.log",
@@ -26,7 +29,7 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
-    // ── JWT ────────────────────────────────────────────────────────────────
+    // JWT-autentisering – läser nycklar från appsettings
     var jwtKey      = builder.Configuration["Jwt:Key"]
         ?? throw new InvalidOperationException("Jwt:Key not configured.");
     var jwtIssuer   = builder.Configuration["Jwt:Issuer"]   ?? "DevSecOpsApi";
@@ -44,7 +47,7 @@ try
                 ValidIssuer              = jwtIssuer,
                 ValidAudience            = jwtAudience,
                 IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-                ClockSkew                = TimeSpan.Zero
+                ClockSkew                = TimeSpan.Zero  // ingen extra marginal på utgångstid
             };
         });
 
@@ -54,23 +57,23 @@ try
         o.AddPolicy("UserOrAdmin", p => p.RequireRole("User", "Admin"));
     });
 
-    // ── Database ───────────────────────────────────────────────────────────
+    // SQLite-databas via EF Core
     builder.Services.AddDbContext<AppDbContext>(o =>
         o.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
              ?? "Data Source=app.db"));
 
-    // ── Health Checks ──────────────────────────────────────────────────────
+    // Health checks – används av CI/CD för att se att appen lever
     builder.Services.AddHealthChecks()
         .AddDbContextCheck<AppDbContext>("database");
 
-    // ── Rate Limiting ──────────────────────────────────────────────────────
+    // Rate limiting per IP – skydd mot brute force och spam
     builder.Services.AddMemoryCache();
     builder.Services.Configure<IpRateLimitOptions>(
         builder.Configuration.GetSection("IpRateLimiting"));
     builder.Services.AddInMemoryRateLimiting();
     builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
 
-    // ── Services ───────────────────────────────────────────────────────────
+    // Våra egna tjänster (scoped = en instans per HTTP-request)
     builder.Services.AddScoped<IAuthService,    AuthService>();
     builder.Services.AddScoped<IPostService,    PostService>();
     builder.Services.AddScoped<ICommentService, CommentService>();
@@ -78,14 +81,14 @@ try
     builder.Services.AddScoped<IImageService,   ImageService>();
     builder.Services.AddScoped<IEmailService,   EmailService>();
 
-    // ── CORS ───────────────────────────────────────────────────────────────
+    // CORS – tillåter bara våra lokala frontend-portar
     builder.Services.AddCors(o =>
         o.AddPolicy("Frontend", p =>
             p.WithOrigins("http://localhost:5173", "http://localhost:3000")
              .AllowAnyHeader()
              .AllowAnyMethod()));
 
-    // ── Static files (image uploads) ───────────────────────────────────────
+    // Statiska filer (uppladdade bilder i wwwroot/uploads)
     builder.Services.AddDirectoryBrowser();
 
     builder.Services.AddControllers();
@@ -98,6 +101,7 @@ try
             Version     = "v2",
             Description = "Secure .NET 8 Web API with DevSecOps best practices."
         });
+        // Swagger ska kunna ta emot Bearer-token i UI:t
         c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
         {
             Description = "JWT Bearer token",
@@ -121,14 +125,14 @@ try
 
     var app = builder.Build();
 
-    // ── Migrate & seed ─────────────────────────────────────────────────────
+    // Skapa databasen om den inte finns (dev/demo – inte migrations i prod)
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.EnsureCreated();
     }
 
-    // ── Pipeline ───────────────────────────────────────────────────────────
+    // HTTP-pipeline – ordningen spelar roll!
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
@@ -138,13 +142,13 @@ try
     app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseIpRateLimiting();
 
-    app.UseStaticFiles();   // serve uploaded images from wwwroot/uploads
+    app.UseStaticFiles();   // serverar uppladdade bilder från wwwroot/uploads
     app.UseCors("Frontend");
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
 
-    // Dedicated health endpoint (used by CI/CD)
+    // Egen health-endpoint utöver MapHealthChecks (används i pipeline)
     app.MapHealthChecks("/health", new HealthCheckOptions
     {
         ResultStatusCodes =
@@ -166,4 +170,5 @@ finally
     Log.CloseAndFlush();
 }
 
+// Behövs så att WebApplicationFactory i tester kan hitta Program-klassen
 public partial class Program { }

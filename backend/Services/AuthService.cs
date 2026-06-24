@@ -1,3 +1,6 @@
+// AuthService.cs – hanterar registrering, inloggning, JWT och refresh tokens.
+// BCrypt för lösenord, audit-loggning på viktiga händelser.
+
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -19,6 +22,9 @@ public interface IAuthService
     Task<bool>          VerifyEmailAsync(string token);
 }
 
+/// <summary>
+/// All autentiseringslogik – registrering, login, token rotation m.m.
+/// </summary>
 public class AuthService(
     AppDbContext     db,
     IConfiguration   config,
@@ -44,13 +50,13 @@ public class AuthService(
             PasswordHash      = BCrypt.Net.BCrypt.HashPassword(req.Password),
             Email             = req.Email,
             VerificationToken = verificationToken,
-            EmailVerified     = req.Email is null   // auto-verify if no email given
+            EmailVerified     = req.Email is null   // ingen e-post = ingen verifiering behövs
         };
 
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        // Send verification email (non-blocking)
+        // Skicka verifieringsmail i bakgrunden så vi inte blockerar svaret
         if (req.Email is not null)
             _ = emailService.SendVerificationEmailAsync(req.Email, req.Username, verificationToken);
 
@@ -94,7 +100,7 @@ public class AuthService(
 
         if (stored is null || !stored.IsActive) return null;
 
-        // Rotate: revoke old, issue new
+        // Token rotation – det gamla ogiltigförklaras, nytt skapas
         stored.IsRevoked = true;
         var newRefresh = await CreateRefreshTokenAsync(stored.User, ip);
 
@@ -116,16 +122,16 @@ public class AuthService(
         var user = await db.Users.FirstOrDefaultAsync(u => u.VerificationToken == token);
         if (user is null) return false;
         user.EmailVerified     = true;
-        user.VerificationToken = null;
+        user.VerificationToken = null;  // token ska bara gå att använda en gång
         await db.SaveChangesAsync();
         return true;
     }
 
-    // ── Private helpers ────────────────────────────────────────────────────
+    // ── Privata hjälpmetoder ───────────────────────────────────────────────
 
     private async Task<RefreshToken> CreateRefreshTokenAsync(User user, string? ip)
     {
-        // Purge old expired tokens for this user
+        // Städa bort gamla/utgångna tokens så tabellen inte växer i all oändlighet
         var expired = db.RefreshTokens
             .Where(r => r.UserId == user.Id && (r.IsRevoked || r.ExpiresAt < DateTime.UtcNow));
         db.RefreshTokens.RemoveRange(expired);
@@ -165,6 +171,7 @@ public class AuthService(
         return new JwtSecurityTokenHandler().WriteToken(jwt);
     }
 
+    // URL-säker random sträng (base64 utan +/=)
     private static string GenerateSecureToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
                .Replace("+", "-").Replace("/", "_").Replace("=", "");

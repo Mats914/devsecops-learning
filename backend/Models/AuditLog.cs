@@ -1,7 +1,12 @@
+// AuditLog.cs – spårar säkerhetsrelaterade händelser (login, register, token refresh m.m.).
+
 using System.ComponentModel.DataAnnotations;
 
 namespace DevSecOpsApi.Models;
 
+/// <summary>
+/// En rad i audit-loggen – vem gjorde vad, när och om det lyckades.
+/// </summary>
 public class AuditLog
 {
     public int    Id         { get; set; }

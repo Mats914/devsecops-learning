@@ -1,4 +1,4 @@
-# ── Stage 1: Build ─────────────────────────────────────────────────────────
+# ── Steg 1: Bygg .NET-applikationen ─────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
@@ -9,17 +9,17 @@ COPY backend/ ./
 RUN dotnet publish DevSecOpsApi.csproj -c Release -o /app/publish \
     --no-restore /p:UseAppHost=false
 
-# ── Stage 2: Runtime (minimal image) ──────────────────────────────────────
+# ── Steg 2: Runtime (minimal image) ─────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# Security: run as non-root user
+# Säkerhet: kör som icke-root-användare
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 USER appuser
 
 COPY --from=build /app/publish .
 
-# Health check used by Docker / Kubernetes
+# Health check som Docker/Kubernetes kan använda
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -qO- http://localhost:5000/health || exit 1
 

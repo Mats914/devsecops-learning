@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import type { ApiError } from '../types';
 
-// ── Validation ─────────────────────────────────────────────────────────────
+// ── Valideringsregler (samma logik som i backend/test) ──────────────────────
 
 const rules = {
   username: (v: string) => {
@@ -22,7 +22,7 @@ const rules = {
   },
 };
 
-// ── Login ──────────────────────────────────────────────────────────────────
+// ── Inloggning ──────────────────────────────────────────────────────────────
 
 export function LoginPage() {
   const { login }   = useAuth();
@@ -53,7 +53,7 @@ export function LoginPage() {
   );
 }
 
-// ── Register ───────────────────────────────────────────────────────────────
+// ── Registrering ────────────────────────────────────────────────────────────
 
 export function RegisterPage() {
   const { register } = useAuth();
@@ -66,6 +66,7 @@ export function RegisterPage() {
   const [loading,  setLoading]  = useState(false);
   const [strength, setStrength] = useState(0);
 
+  // Enkel styrkemätare – räknar hur många krav som uppfylls
   function calcStrength(p: string) {
     let s = 0;
     if (p.length >= 8)      s++;
@@ -115,7 +116,7 @@ export function RegisterPage() {
   );
 }
 
-// ── Shared components ──────────────────────────────────────────────────────
+// ── Delade formulärkomponenter ──────────────────────────────────────────────
 
 interface AuthFormProps {
   title: string; onSubmit: (e: React.FormEvent) => void;

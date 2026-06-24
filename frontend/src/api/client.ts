@@ -1,9 +1,9 @@
 /**
- * Secure API client — DevSecOps principles:
- * - Access token in memory (not localStorage → mitigates XSS theft)
- * - Refresh token auto-rotation on 401
- * - Centralized error handling
- * - All requests go through one function (no scattered fetch calls)
+ * Säker API-klient – DevSecOps-principer:
+ * - Access token i minnet (inte localStorage → minskar risk vid XSS)
+ * - Refresh token roteras automatiskt vid 401
+ * - Centraliserad felhantering
+ * - Alla anrop går via en funktion (inga utspridda fetch-anrop)
  */
 
 import type {
@@ -14,10 +14,10 @@ import type {
 
 const BASE = '/api';
 
-// ── In-memory token store ──────────────────────────────────────────────────
+// ── Token-lagring i minnet ──────────────────────────────────────────────────
 let _accessToken:  string | null = null;
 let _refreshToken: string | null = null;
-let _refreshing:   Promise<boolean> | null = null;
+let _refreshing:   Promise<boolean> | null = null; // förhindrar dubbla refresh-anrop
 
 export const tokenStore = {
   setTokens: (access: string, refresh: string) => {
@@ -32,18 +32,19 @@ export const tokenStore = {
   getRefresh: () => _refreshToken,
 };
 
-// ── Base fetch ─────────────────────────────────────────────────────────────
+// ── Grundläggande fetch-wrapper ─────────────────────────────────────────────
 
 async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> ?? {}),
   };
 
-  // Don't set Content-Type for FormData (browser sets it with boundary)
+  // Sätt inte Content-Type för FormData – webbläsaren sätter boundary själv
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
+  // Skicka JWT om vi har en inloggad session
   if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
 
   const res = await fetch(`${BASE}${path}`, {
@@ -52,12 +53,13 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     credentials: 'same-origin',
   });
 
-  // Auto-refresh on 401
+  // Token utgången? Försök refresha och kör om requesten en gång
   if (res.status === 401 && retry && _refreshToken) {
     const ok = await silentRefresh();
     if (ok) return request<T>(path, options, false);
   }
 
+  // DELETE etc. kan returnera 204 utan body
   if (res.status === 204) return undefined as unknown as T;
 
   const body = await res.json().catch(() => ({}));
@@ -65,6 +67,7 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
   return body as T;
 }
 
+// Tyst refresh i bakgrunden – användaren märker inget om det lyckas
 async function silentRefresh(): Promise<boolean> {
   if (_refreshing) return _refreshing;
   _refreshing = (async () => {
@@ -88,7 +91,7 @@ async function silentRefresh(): Promise<boolean> {
   return _refreshing;
 }
 
-// ── Auth API ───────────────────────────────────────────────────────────────
+// ── Auth-endpoints ───────────────────────────────────────────────────────────
 
 export const authApi = {
   register: (data: RegisterRequest) =>
@@ -104,7 +107,7 @@ export const authApi = {
     request<void>('/auth/revoke', { method: 'POST', body: JSON.stringify({ refreshToken }) }),
 };
 
-// ── Posts API ──────────────────────────────────────────────────────────────
+// ── Inlägg (posts) ───────────────────────────────────────────────────────────
 
 export const postsApi = {
   getAll: ({ page = 1, pageSize = 10, search, author }: Partial<PageParams> = {}) => {
@@ -116,6 +119,7 @@ export const postsApi = {
 
   getById: (id: number) => request<Post>(`/posts/${id}`),
 
+  // Skapar inlägg med FormData så vi kan ladda upp bild samtidigt
   create: (data: CreatePostRequest, image?: File) => {
     const form = new FormData();
     form.append('title',   data.title);
@@ -130,7 +134,7 @@ export const postsApi = {
   delete: (id: number) => request<void>(`/posts/${id}`, { method: 'DELETE' }),
 };
 
-// ── Comments API ───────────────────────────────────────────────────────────
+// ── Kommentarer ──────────────────────────────────────────────────────────────
 
 export const commentsApi = {
   getByPost: (postId: number) =>

@@ -1,3 +1,6 @@
+# CI/CD-pipeline för DevSecOps-projektet.
+# Körs vid push till main/develop och vid pull requests mot main.
+
 name: DevSecOps CI/CD Pipeline v2
 
 on:
@@ -10,7 +13,7 @@ env:
 
 jobs:
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 1 — Backend: Security Scan + Build + Test
+# JOB 1 — Backend: säkerhetsskanning, build och tester
 # ═══════════════════════════════════════════════════════════════════════════
   backend:
     name: Backend — Scan · Build · Test
@@ -27,7 +30,7 @@ jobs:
         working-directory: backend
         run: dotnet restore DevSecOpsApi.csproj
 
-      # ── SECURITY GATE 1: NuGet vulnerability scan ────────────────────────
+      # ── SÄKERHETSGATE 1: NuGet-sårbarhetsskanning ─────────────────────────
       - name: 🔒 NuGet vulnerability scan
         working-directory: backend
         run: |
@@ -38,8 +41,8 @@ jobs:
 
           cat vuln-report.txt
 
-          # Count High/Critical lines in the table output
-          # Table rows look like: "   > PackageName   x.y.z   High   https://..."
+          # Räkna rader med High/Critical i tabellutskriften
+          # Radformat: "   > Paketnamn   x.y.z   High   https://..."
           HIGH_COUNT=$(grep -cE "High|Critical" vuln-report.txt || true)
 
           if [ "$HIGH_COUNT" -gt "0" ]; then
@@ -73,7 +76,7 @@ jobs:
           path: backend/TestResults/
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 2 — Frontend: Security Scan + Lint + Test + Build
+# JOB 2 — Frontend: säkerhetsskanning, lint, tester och build
 # ═══════════════════════════════════════════════════════════════════════════
   frontend:
     name: Frontend — Scan · Lint · Test · Build
@@ -92,7 +95,7 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # ── SECURITY GATE 2: npm audit ───────────────────────────────────────
+      # ── SÄKERHETSGATE 2: npm audit ───────────────────────────────────────
       - name: 🔒 npm dependency audit
         working-directory: frontend
         run: |
@@ -105,7 +108,7 @@ jobs:
           }
           echo "✅ npm audit passed."
 
-      # ── TypeScript type check ─────────────────────────────────────────────
+      # ── TypeScript-typkontroll ────────────────────────────────────────────
       - name: TypeScript type check
         working-directory: frontend
         run: npm run type-check
@@ -115,12 +118,12 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      # ── Tests ─────────────────────────────────────────────────────────────
+      # ── Enhetstester ─────────────────────────────────────────────────────
       - name: Run frontend tests
         working-directory: frontend
         run: npm test
 
-      # ── Production build ──────────────────────────────────────────────────
+      # ── Produktionsbuild ──────────────────────────────────────────────────
       - name: Build production bundle
         working-directory: frontend
         run: npm run build
@@ -132,7 +135,7 @@ jobs:
           path: frontend/dist/
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 3 — CodeQL SAST (C# + TypeScript)
+# JOB 3 — CodeQL statisk säkerhetsanalys (C# + TypeScript)
 # ═══════════════════════════════════════════════════════════════════════════
   codeql:
     name: 🔒 CodeQL SAST
@@ -170,7 +173,7 @@ jobs:
           category: "/language:${{ matrix.language }}"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 4 — Docker Build & Trivy Scan
+# JOB 4 — Docker-build och Trivy-skanning av images
 # ═══════════════════════════════════════════════════════════════════════════
   docker-scan:
     name: 🔒 Docker Build & Trivy Scan
@@ -203,7 +206,7 @@ jobs:
           ignore-unfixed: true
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 5 — Smoke Test
+# JOB 5 — Smoke test: startar API och testar /health
 # ═══════════════════════════════════════════════════════════════════════════
   smoke-test:
     name: 🚀 Smoke Test — /health
@@ -242,7 +245,7 @@ jobs:
           echo "✅ Health check passed."
 
 # ═══════════════════════════════════════════════════════════════════════════
-# JOB 6 — Deploy (main only, all gates must pass)
+# JOB 6 — Deploy till GitHub Pages (endast main, alla gates måste vara gröna)
 # ═══════════════════════════════════════════════════════════════════════════
   deploy:
     name: 🚀 Deploy to GitHub Pages

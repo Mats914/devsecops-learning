@@ -1,8 +1,11 @@
+// Dtos.cs – request/response-objekt för API:t.
+// Data annotations validerar indata innan den når controllern.
+
 using System.ComponentModel.DataAnnotations;
 
 namespace DevSecOpsApi.DTOs;
 
-// ── Auth ───────────────────────────────────────────────────────────────────
+// ── Autentisering ──────────────────────────────────────────────────────────
 
 public record RegisterRequest(
     [Required, MinLength(3), MaxLength(50),
@@ -37,7 +40,7 @@ public record AuthResponse(
     DateTime AccessTokenExpiresAt
 );
 
-// ── Posts ──────────────────────────────────────────────────────────────────
+// ── Inlägg ─────────────────────────────────────────────────────────────────
 
 public record CreatePostRequest(
     [Required, MinLength(3), MaxLength(200)]  string Title,
@@ -69,7 +72,7 @@ public record PostsPagedResponse(
     int TotalPages
 );
 
-// ── Comments ───────────────────────────────────────────────────────────────
+// ── Kommentarer ────────────────────────────────────────────────────────────
 
 public record CreateCommentRequest(
     [Required, MinLength(1), MaxLength(2000)] string Content
@@ -87,6 +90,6 @@ public record CommentResponse(
     DateTime UpdatedAt
 );
 
-// ── Health ─────────────────────────────────────────────────────────────────
+// ── Hälsa (health) ─────────────────────────────────────────────────────────
 
 public record HealthResponse(string Status, string Version, DateTime Timestamp);

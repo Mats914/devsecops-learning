@@ -1,3 +1,6 @@
+// PostsController.cs – API för blogginlägg (lista, visa, skapa, uppdatera, radera).
+// Skapa stödjer multipart/form-data så man kan ladda upp bild samtidigt.
+
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,7 +33,7 @@ public class PostsController(IPostService postService, IImageService imageServic
         return post is null ? NotFound() : Ok(post);
     }
 
-    // POST /api/posts  (multipart/form-data to support image)
+    // POST /api/posts – multipart så titel/innehåll + bild kan skickas tillsammans
     [HttpPost]
     [Authorize]
     [Consumes("multipart/form-data")]
@@ -73,6 +76,7 @@ public class PostsController(IPostService postService, IImageService imageServic
         return ok ? NoContent() : NotFound(new { message = "Post not found or access denied." });
     }
 
+    // Hämtar user id och roll från JWT-claims
     private int    GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private string GetRole()   => User.FindFirstValue(ClaimTypes.Role) ?? "User";
 }

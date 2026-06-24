@@ -1,3 +1,6 @@
+// AuthController.cs – REST-endpoints för registrering, login, token refresh och e-postverifiering.
+// IP-adress skickas vidare till AuthService för audit-loggning.
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using DevSecOpsApi.DTOs;
@@ -36,7 +39,7 @@ public class AuthController(IAuthService authService) : ControllerBase
         return Ok(result);
     }
 
-    // POST /api/auth/refresh
+    // POST /api/auth/refresh – byter ut refresh token mot nya tokens
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(AuthResponse), 200)]
     [ProducesResponseType(401)]
@@ -48,7 +51,7 @@ public class AuthController(IAuthService authService) : ControllerBase
         return Ok(result);
     }
 
-    // POST /api/auth/revoke
+    // POST /api/auth/revoke – loggar ut genom att ogiltigförklara refresh token
     [HttpPost("revoke")]
     [Authorize]
     [ProducesResponseType(204)]

@@ -1,7 +1,12 @@
+// Post.cs – blogginlägg med titel, innehåll, valfri bild och visningsräknare.
+
 using System.ComponentModel.DataAnnotations;
 
 namespace DevSecOpsApi.Models;
 
+/// <summary>
+/// Ett publicerat (eller utkast-) inlägg skrivet av en användare.
+/// </summary>
 public class Post
 {
     public int    Id        { get; set; }

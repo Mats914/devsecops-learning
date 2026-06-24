@@ -1,3 +1,6 @@
+// PostService.cs – CRUD för blogginlägg med paginering, sök och behörighetskontroll.
+// Bara publicerade inlägg syns publikt; ägare eller Admin får redigera/radera.
+
 using Microsoft.EntityFrameworkCore;
 using DevSecOpsApi.Data;
 using DevSecOpsApi.DTOs;
@@ -14,12 +17,15 @@ public interface IPostService
     Task<bool>                 DeleteAsync(int id, int requesterId, string role);
 }
 
+/// <summary>
+/// Affärslogik för inlägg – filtrering, sidindelning och åtkomstkontroll.
+/// </summary>
 public class PostService(AppDbContext db) : IPostService
 {
     public async Task<PostsPagedResponse> GetAllAsync(int page, int pageSize, string? search, string? author)
     {
         page     = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 50);
+        pageSize = Math.Clamp(pageSize, 1, 50);  // max 50 per sida så ingen kan hämta hela DB:n
 
         var query = db.Posts
             .Include(p => p.Author)
@@ -62,7 +68,7 @@ public class PostService(AppDbContext db) : IPostService
 
         if (post is null) return null;
 
-        // Increment view count
+        // Räkna upp visningar varje gång någon öppnar inlägget
         post.ViewCount++;
         await db.SaveChangesAsync();
 
@@ -89,6 +95,7 @@ public class PostService(AppDbContext db) : IPostService
         var post = await db.Posts.Include(p => p.Author).Include(p => p.Comments)
                                   .FirstOrDefaultAsync(p => p.Id == id);
         if (post is null) return null;
+        // Bara skribenten själv eller Admin får ändra
         if (post.AuthorId != requesterId && role != "Admin") return null;
 
         post.Title     = req.Title.Trim();

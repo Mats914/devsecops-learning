@@ -1,7 +1,13 @@
+// RefreshToken.cs – långlivad token för att hämta nya access tokens utan om-inloggning.
+// Ogiltigförklaras vid rotation eller utgång.
+
 using System.ComponentModel.DataAnnotations;
 
 namespace DevSecOpsApi.Models;
 
+/// <summary>
+/// Refresh token lagrad i databasen – kopplad till en användare.
+/// </summary>
 public class RefreshToken
 {
     public int      Id         { get; set; }
@@ -16,7 +22,7 @@ public class RefreshToken
     [MaxLength(50)]
     public string?  CreatedByIp { get; set; }
 
-    // FK
+    // Främmande nyckel till User
     public int  UserId { get; set; }
     public User User   { get; set; } = null!;
 

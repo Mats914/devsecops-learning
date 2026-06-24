@@ -1,3 +1,6 @@
+// ImageService.cs – validerar och sparar uppladdade bilder.
+// Kollar filstorlek, tillåten filändelse och att det faktiskt är en bild (ImageSharp).
+
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 
@@ -9,6 +12,9 @@ public interface IImageService
     void          DeleteImage(string? path);
 }
 
+/// <summary>
+/// Säker bilduppladdning – avvisar fejkade filer och skalar ner stora bilder.
+/// </summary>
 public class ImageService(IConfiguration config, ILogger<ImageService> logger) : IImageService
 {
     private readonly long     _maxSize     = config.GetValue<long>("Upload:MaxFileSizeBytes", 5_242_880);
@@ -23,13 +29,13 @@ public class ImageService(IConfiguration config, ILogger<ImageService> logger) :
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!_allowedExts.Contains(ext)) return null;
 
-        // Validate it's actually an image (not just extension-spoofed)
+        // Ladda bilden på riktigt – fångar någon som bytt filändelse manuellt
         try
         {
             using var stream = file.OpenReadStream();
             using var img    = await Image.LoadAsync(stream);
 
-            // Resize if too large (max 1200px wide)
+            // Skala ner om bilden är bredare än 1200 px (höjd räknas ut automatiskt)
             if (img.Width > 1200)
                 img.Mutate(x => x.Resize(1200, 0));
 

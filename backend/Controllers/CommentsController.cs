@@ -1,3 +1,6 @@
+// CommentsController.cs – kommentarer nästlade under /api/posts/{postId}/comments.
+// Kräver inloggning för att skriva, ändra eller ta bort.
+
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

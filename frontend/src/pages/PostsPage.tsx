@@ -3,7 +3,7 @@ import { postsApi, commentsApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import type { Post, Comment, PostsPagedResponse, ApiError } from '../types';
 
-// ── Main posts page ────────────────────────────────────────────────────────
+// ── Huvudsidan med inläggslista ─────────────────────────────────────────────
 
 export function PostsPage() {
   const { user } = useAuth();
@@ -11,7 +11,7 @@ export function PostsPage() {
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState('');
   const [editId,   setEditId]   = useState<number | null>(null);
-  const [openPost, setOpenPost] = useState<number | null>(null);
+  const [openPost, setOpenPost] = useState<number | null>(null); // vilket inlägg som visar kommentarer
   const [search,   setSearch]   = useState('');
   const [page,     setPage]     = useState(1);
 
@@ -40,7 +40,7 @@ export function PostsPage() {
 
   return (
     <div className="posts-page">
-      {/* Search bar */}
+      {/* Sökfält */}
       <form onSubmit={handleSearch} className="search-bar">
         <input placeholder="Search posts…" value={search}
           onChange={e => setSearch(e.target.value)} />
@@ -53,7 +53,7 @@ export function PostsPage() {
         )}
       </form>
 
-      {/* Create form */}
+      {/* Skapa inlägg – bara synligt om man är inloggad */}
       {user && <CreatePostForm onCreated={() => fetchPosts(1)} />}
 
       {error && <p className="error-msg">{error}</p>}
@@ -76,7 +76,7 @@ export function PostsPage() {
             )
       }
 
-      {/* Pagination */}
+      {/* Sidnumrering */}
       {data && data.totalPages > 1 && (
         <div className="pagination">
           <button className="btn btn-secondary btn-sm"
@@ -96,7 +96,7 @@ export function PostsPage() {
   );
 }
 
-// ── Create post form ───────────────────────────────────────────────────────
+// ── Formulär för nytt inlägg ────────────────────────────────────────────────
 
 function CreatePostForm({ onCreated }: { onCreated: () => void }) {
   const [title,   setTitle]   = useState('');
@@ -111,7 +111,7 @@ function CreatePostForm({ onCreated }: { onCreated: () => void }) {
     if (!file) return;
     if (file.size > 5_242_880) { setError('Image must be under 5 MB.'); return; }
     setImage(file);
-    setPreview(URL.createObjectURL(file));
+    setPreview(URL.createObjectURL(file)); // snabb förhandsvisning utan uppladdning
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -156,7 +156,7 @@ function CreatePostForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-// ── Edit post form ─────────────────────────────────────────────────────────
+// ── Formulär för att redigera inlägg ────────────────────────────────────────
 
 function EditPostForm({ post, onSaved, onCancel }:
   { post: Post; onSaved: () => void; onCancel: () => void }) {
@@ -199,7 +199,7 @@ function EditPostForm({ post, onSaved, onCancel }:
   );
 }
 
-// ── Post card with comments ────────────────────────────────────────────────
+// ── Inläggskort med kommentarer ─────────────────────────────────────────────
 
 interface PostCardProps {
   post: Post; expanded: boolean; canModify: boolean;
@@ -213,6 +213,7 @@ function PostCard({ post, expanded, canModify, onToggle, onEdit, onDelete }: Pos
   const [savingC,  setSavingC]  = useState(false);
   const { user } = useAuth();
 
+  // Hämta kommentarer först när användaren expanderar (lazy load)
   useEffect(() => {
     if (!expanded) return;
     setLoadingC(true);
@@ -273,6 +274,7 @@ function PostCard({ post, expanded, canModify, onToggle, onEdit, onDelete }: Pos
               <div className="comment-meta">
                 <span className="author">{c.authorUsername}</span>
                 <time>{new Date(c.createdAt).toLocaleDateString()}</time>
+                {/* Radera-knapp bara för egen kommentar eller admin */}
                 {user && (user.username === c.authorUsername || user.role === 'Admin') && (
                   <button className="btn btn-danger btn-xs" onClick={() => deleteComment(c.id)}>×</button>
                 )}

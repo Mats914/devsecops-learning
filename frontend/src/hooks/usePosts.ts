@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { postsApi } from '../api/client';
 import type { Post, PostsPagedResponse, PageParams, ApiError } from '../types';
 
+// Hook för att hämta och hantera en paginerad lista med inlägg
 export function usePosts() {
   const [data,    setData]    = useState<PostsPagedResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,6 +21,7 @@ export function usePosts() {
     }
   }, []);
 
+  // Tar bort lokalt direkt så listan känns snabb (optimistisk uppdatering)
   const deletePost = useCallback(async (id: number) => {
     await postsApi.delete(id);
     setData(prev => prev
@@ -30,6 +32,7 @@ export function usePosts() {
   return { data, loading, error, fetch, deletePost };
 }
 
+// Hook för ett enskilt inlägg (t.ex. detaljsida)
 export function usePost(id: number) {
   const [post,    setPost]    = useState<Post | null>(null);
   const [loading, setLoading] = useState(false);

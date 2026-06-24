@@ -1,3 +1,6 @@
+// HealthController.cs – egen health-endpoint med versionsinfo och detaljerade checks.
+// Returnerar 503 om någon check (t.ex. databas) är unhealthy.
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using DevSecOpsApi.DTOs;

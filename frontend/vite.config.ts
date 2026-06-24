@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Proxy: frontend anropar /api → skickas vidare till backend på port 5000
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
@@ -13,7 +14,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'jsdom',
+    environment: 'jsdom', // simulerad webbläsare för komponenttester
     setupFiles: './src/test/setup.ts',
   },
 })

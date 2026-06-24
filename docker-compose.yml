@@ -1,3 +1,6 @@
+# Docker Compose – startar hela stacken lokalt eller i produktion.
+# Frontend på port 80, backend internt på 5000.
+
 version: '3.9'
 
 services:
@@ -35,15 +38,15 @@ services:
       - "80:80"
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_healthy  # vänta tills API svarar på /health
     restart: unless-stopped
     networks:
       - app-net
 
 volumes:
-  db-data:
-  uploads:
-  logs:
+  db-data:    # SQLite-databas
+  uploads:    # uppladdade bilder
+  logs:       # Serilog-loggar
 
 networks:
   app-net:
